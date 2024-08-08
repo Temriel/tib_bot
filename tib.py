@@ -1,61 +1,60 @@
+from typing import Optional
 import discord
-from discord import app_commands
 from discord.ext import commands
+from discord import app_commands
 import os
+import sys
 from dotenv import load_dotenv
-import asyncio
+import logging
 
 load_dotenv()
 
-intents = discord.Intents.none()
-bot = commands.Bot(intents=intents, command_prefix=">")
-tree = bot.tree
-GUILD_ID = 991132678202085446
+handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 
-async def load_cogs():
-    for filename in os.listdir('./cogs'):
-        if filename.endswith('.py') and filename != '__init__.py':
-            try:
-                await bot.load_extension(f'cogs.{filename[:-3]}')
-                print(f'Loaded {filename}')
-            except Exception as e:
-                print(f'Failed to load: {e}')
+MY_GUILD = discord.Object(id=991132678202085446)
 
-@bot.event # startup + shutdown command
+class MyClient(discord.Client):
+    def __init__(self, *, intents: discord.Intents):
+        super().__init__(intents=intents)
+        self.tree = app_commands.CommandTree(self)
+
+    async def setup_hook(self):
+        self.tree.copy_global_to(guild=MY_GUILD)
+        await self.tree.sync(guild=MY_GUILD)
+
+intents = discord.Intents.default()
+client = MyClient(intents=intents)
+
+def restart_bot():
+    os.execv(sys.executable, ['python'] + sys.argv)
+
+@client.event
 async def on_ready():
-    print("Started.")
-    try: 
-        if GUILD_ID:
-            guild = discord.Object(id=GUILD_ID)
-            await tree.sync(guild=guild)
-            print('Application commands synced for the guild {GUILD_ID}')
-        else:
-            await tree.sync()
-            print('Application commands synced globally.')
-        
-        print("Registered Commands:")
-        for command in await tree.fetch_commands():
-            print(f'{command.name}: {command.description}')
+    print(f'Started. Logged in as {client.user}.')
 
-        @tree.command()
-        async def shutdown(interaction: discord.Interaction):
-            """Shuts down the bot."""
-            if interaction.user.id == 313264660826685440:
-                await interaction.response.send_message("Shutting down...")
-                await bot.close()
-            else:
-                await interaction.response.send_message("You do not have permission to use this command.", ephemeral=True)
-    except Exception as e:
-        print(f'Failed to sync: {e}')
+@client.tree.command(name='shutdown', description='Shut down the bot.')
+async def shutdown(interaction: discord.Interaction):
+    if interaction.user.id == 313264660826685440:
+        await interaction.response.send_message("Shutting down...")
+        await client.close()
+    else:
+        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
-@bot.event
-async def on_error(event, *args, **kwargs):
-    print("Error detected: {event}")
+#@client.tree.command(name='restart', description='Restart the bot.')
+#async def restart(interaction:discord.Interaction):
+#    if interaction.user.id == 313264660826685440:
+#        await interaction.response.send_message("Restarting bot...")
+#    else:
+#        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+#
+### I might re-implement this if I can get it to work. 
 
-async def main():
-    async with bot:
-        await load_cogs()
-        await bot.start(os.getenv("BOT_TOKEN"))
+@client.tree.command(name='hello', description='Say hi!')
+async def hello(interaction: discord.Interaction):
+    await interaction.response.send_message(f'Hello, {interaction.user.mention}.')
 
-if __name__ == '__main__':
-    asyncio.run(main())
+@client.tree.command(name='ping', description='See the ping.')
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message(f'Pong! Current ping is {round(client.latency * 1000)}ms.')
+
+client.run(os.getenv("BOT_TOKEN"), log_handler=handler, log_level=logging.DEBUG)
