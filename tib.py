@@ -1,9 +1,8 @@
-from typing import Optional
+import asyncio
 import discord
-from discord.ext import commands
 from discord import app_commands
+from discord.ext import commands
 import os
-import sys
 from dotenv import load_dotenv
 import logging
 
@@ -11,50 +10,53 @@ load_dotenv()
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 
-MY_GUILD = discord.Object(id=991132678202085446)
-
-class MyClient(discord.Client):
-    def __init__(self, *, intents: discord.Intents):
-        super().__init__(intents=intents)
-        self.tree = app_commands.CommandTree(self)
-
-    async def setup_hook(self):
-        self.tree.copy_global_to(guild=MY_GUILD)
-        await self.tree.sync(guild=MY_GUILD)
-
-intents = discord.Intents.default()
-client = MyClient(intents=intents)
-
-def restart_bot():
-    os.execv(sys.executable, ['python'] + sys.argv)
+intents = discord.Intents.none()
+client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
+bot = commands.Bot(command_prefix='>', intents=intents)
 
 @client.event
 async def on_ready():
     print(f'Started. Logged in as {client.user}.')
 
-@client.tree.command(name='shutdown', description='Shut down the bot.')
-async def shutdown(interaction: discord.Interaction):
+async def load():
+    for filename in os.listdir('./cogs'):
+        if filename.endswith('.py'):
+            await bot.load_extension(f'cogs.{filename[:-3]}')
+            print(f'{filename[:-3]} successfully loaded.')
+
+
+@tree.command(name='shutdown', description='Shut down the bot.')
+async def slash_command(interaction: discord.Interaction):
     if interaction.user.id == 313264660826685440:
         await interaction.response.send_message("Shutting down...")
         await client.close()
     else:
         await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
-#@client.tree.command(name='restart', description='Restart the bot.')
-#async def restart(interaction:discord.Interaction):
-#    if interaction.user.id == 313264660826685440:
-#        await interaction.response.send_message("Restarting bot...")
-#    else:
-#        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-#
-### I might re-implement this if I can get it to work. 
+@tree.command(name='sync', description='Sync.')
+async def slash_command(interaction: discord.Interaction):
+    if interaction.user.id == 313264660826685440:
+        fmt = await tree.sync()
+        await interaction.response.send_message('Synced commands.', ephemeral=True)
+        print(f'Synced {len(fmt)} commands to the current guild.')
+    else:
+        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
-@client.tree.command(name='hello', description='Say hi!')
-async def hello(interaction: discord.Interaction):
-    await interaction.response.send_message(f'Hello, {interaction.user.mention}.')
+@tree.command(name='reload-cogs', description='Reload the cogs.')
+async def slash_command(interaction: discord.Interaction):
+    if interaction.user.id == 313264660826685440:
+        for filename in os.listdir('./cogs'):
+            if filename.endswith('.py'):
+                await bot.reload_extension(f'cogs.{filename[:-3]}')
+                print(f'{filename[:-3]} successfully re-loaded.')
+                await interaction.response.send_message('Re-loaded cogs.', ephemeral=True)
+    else:
+        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
-@client.tree.command(name='ping', description='See the ping.')
-async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f'Pong! Current ping is {round(client.latency * 1000)}ms.')
+async def main():
+    await load()
+#    await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="The Purple Empire"))
 
-client.run(os.getenv("BOT_TOKEN"), log_handler=handler, log_level=logging.DEBUG)
+asyncio.run(main())
+client.run(os.getenv("BOT_TOKEN"), log_handler=handler)
