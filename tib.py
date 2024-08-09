@@ -26,7 +26,7 @@ async def load():
                 print(f'Failed to reload {filename[:-3]}: {e}')
 
 @tree.command(name='shutdown', description='Shut down the bot.')
-async def slash_command(interaction: discord.Interaction):
+async def shutdown(interaction: discord.Interaction):
     if interaction.user.id == 313264660826685440:
         await interaction.response.send_message("Shutting down...")
         await bot.close()
@@ -34,16 +34,16 @@ async def slash_command(interaction: discord.Interaction):
         await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
 @tree.command(name='sync', description='Sync.')
-async def slash_command(interaction: discord.Interaction):
+async def sync(interaction: discord.Interaction):
     if interaction.user.id == 313264660826685440:
         fmt = await tree.sync()
         await interaction.response.send_message('Synced commands.', ephemeral=True)
-        print(f'Synced {len(fmt)} commands to the current guild.')
+        print(f'Synced {len(fmt)} commands globally.')
     else:
         await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
 @tree.command(name='reload-cogs', description='Reload the cogs.')
-async def slash_command(interaction: discord.Interaction):
+async def reload_cogs(interaction: discord.Interaction):
     if interaction.user.id == 313264660826685440:
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py'):
