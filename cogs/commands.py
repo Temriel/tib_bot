@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-class commands(commands.Cog):
+class commander(commands.Cog):
     def __init__(self, client):
         self.client = client
 
@@ -20,4 +20,4 @@ class commands(commands.Cog):
         await interaction.response.send_message(f'Pong! Current ping is {bot_latency}ms.')
 
 async def setup(client):
-    await client.add_cog(commands(client))
+    await client.add_cog(commander(client))
