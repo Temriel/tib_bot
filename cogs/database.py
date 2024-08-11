@@ -19,12 +19,34 @@ class db(commands.Cog):
     @app_commands.describe(user='The user to add pixels to.', canvas='Canvas number (no c).', pixels='Amount placed.')
     async def database_add(self, interaction: discord.Interaction, user: str, canvas: int, pixels: int):
         if interaction.user.id == 313264660826685440:
-            await interaction.response.send_message("Added!")
             query = "INSERT INTO points VALUES (?, ?, ?)"
             cursor.execute(query, (user, canvas, pixels))
             database.commit()
+            await interaction.response.send_message("Added!")
         else:
             await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
+#    @app_commands.command(name='list', description='See all users in the database')
+#    async def database_list(self, interaction: discord.Interaction):
+#        cursor.execute("SELECT pixels FROM points")
+#        re = cursor.fetchall()
+#
+#        if re == []: # no data
+#            return await interaction.response.send_message('No users in database. ')
+        
+#        embed = discord.Embed(colour=discord.Colour.purple(), title='Added users and their pixel counts.')
+
+#        await interaction.response.send_modal(embed=embed)
+
+    @app_commands.command(name='lookup', description='See how many pixels a certain user has placed for us.')
+    @app_commands.describe(profile='Who do you want to look up?')
+    async def database_lookup(self, interaction: discord.Interaction, profile: str):
+        get_users = "SELECT SUM(pixels) FROM points WHERE user=?"
+        cursor.execute(get_users, (profile,))
+        total = cursor.fetchone()[0]
+        if total is None:
+            total = 0
+        await interaction.response.send_message(f"**{profile}** has placed **{total}** pixels for us. They have the rank of **placeholder**.")
+        
 async def setup(client):
     await client.add_cog(db(client))
