@@ -51,16 +51,23 @@ class db(commands.Cog):
         font_size = 24
         font = ImageFont.truetype(font_path, font_size)
         spacing = 30
-        max_username_lenth = max(len(user) for user, _ in all_pixels)
-        username_spacing = max_username_lenth * font_size
-        
-        image_width = 486
+        max_image_width = 800
+        min_username_x = 36
+
+        all_pixels = [(str(user), total_all) for user, total_all in all_pixels]
+        max_username_length = max(len(user) for user, _ in all_pixels)
+        max_pixels_length = max(len(str(total_all)) for _, total_all in all_pixels)
+
+        username_spacing = max_username_length * font_size + 10
+        pixels_spacing = max_pixels_length * font_size + 6
+
+        image_width = max(200, min(max_image_width, username_spacing + pixels_spacing - 30))
         image_height = spacing * (len(all_pixels) + 3)
         image = Image.new("RGB", (image_width, image_height), color=(24, 4, 53))
         draw = ImageDraw.Draw(image)
 
         headers = ["Rank", "Username", "Pixels"]
-        header_positions = [50, 30 + username_spacing // 2, 30 + username_spacing]
+        header_positions = [50, min_username_x + username_spacing // 2, username_spacing + pixels_spacing // 2 - min_username_x]
         for header, pos in zip(headers, header_positions):
             header_bbox = draw.textbbox((0, 0), header, font=font)
             header_width = header_bbox[2] - header_bbox[0]
@@ -71,16 +78,16 @@ class db(commands.Cog):
             rank_text = str(rank)
             rank_bbox = draw.textbbox((0, 0), rank_text, font=font)
             rank_width = rank_bbox[2] - rank_bbox[0]
-            draw.text((50 - rank_width / 2, y_text), rank_text, fill="white", font=font)
+            draw.text((header_positions[0] - rank_width / 2, y_text), rank_text, fill="white", font=font)
 
             user_bbox = draw.textbbox((0, 0), user, font=font)
             user_width = user_bbox[2] - user_bbox[0]
-            draw.text((30 + username_spacing // 2 - user_width / 2, y_text), user, fill="white", font=font)
+            draw.text((header_positions[1] - user_width / 2, y_text), user, fill="white", font=font)
             
             pixels_text = str(total_all)
             pixels_bbox = draw.textbbox((0, 0), pixels_text, font=font)
             pixels_width = pixels_bbox[2] - pixels_bbox[0]
-            draw.text((30 + username_spacing - pixels_width / 2, y_text), pixels_text, fill="white", font=font)
+            draw.text((header_positions[2] - pixels_width / 2, y_text), pixels_text, fill="white", font=font)
             y_text += spacing
 
         with io.BytesIO() as image_binary:
