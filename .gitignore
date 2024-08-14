@@ -1,6 +1,7 @@
 #mine
 *.db
 *.db-journal
+*.ttf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
