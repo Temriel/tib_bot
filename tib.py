@@ -23,7 +23,7 @@ async def load():
             try:
                 await bot.load_extension(f'cogs.{filename[:-3]}')
             except Exception as e:
-                print(f'Failed to reload {filename[:-3]}: {e}')
+                print(f'Failed to load {filename[:-3]}: {e}')
 
 @tree.command(name='shutdown', description='Shut down the bot.')
 async def shutdown(interaction: discord.Interaction):
@@ -45,15 +45,20 @@ async def sync(interaction: discord.Interaction):
 @tree.command(name='reload-cogs', description='Reload the cogs.')
 async def reload_cogs(interaction: discord.Interaction):
     if interaction.user.id == 313264660826685440:
+        reload = []
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py'):
                 try:
                     await bot.reload_extension(f'cogs.{filename[:-3]}')
                     print(f'{filename[:-3]} successfully re-loaded.')
-                    await interaction.response.send_message('Reloaded cogs.', ephemeral=True)
+                    reload.append(f'{filename[:-3]} successfully re-loaded.')
                 except Exception as e:
                     print(f'Failed to reload {filename[:-3]}: {e}')
-                    await interaction.response.send_message('Reload failed, check terminal.', ephemeral=True)
+                    reload.append(f'Failed to reload {filename[:-3]}, check terminal.')
+        if reload:
+            await interaction.response.send_message('\n'.join(reload), ephemeral=True)
+        else:
+            await interaction.response.send_message('No cogs found.', ephemeral=True)
     else:
         await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
