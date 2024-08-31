@@ -2,6 +2,7 @@
 *.db
 *.db-journal
 *.ttf
+*.vscode
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
