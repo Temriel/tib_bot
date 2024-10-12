@@ -4,10 +4,11 @@ from discord.ext import commands
 import sqlite3
 from PIL import Image, ImageDraw, ImageFont
 import io
+import re
 
 database = sqlite3.connect('database.db')
 cursor = database.cursor()
-database.execute('CREATE TABLE IF NOT EXISTS points(user STRING, canvas INT, pixels INT)')
+database.execute('CREATE TABLE IF NOT EXISTS points(user STR, canvas STR, pixels INT, PRIMARY KEY (user, canvas))')
 
 class db(commands.Cog):
     def __init__(self, client):
@@ -15,39 +16,47 @@ class db(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        print('Database cog loaded.')
+        print('Main DB cog loaded.')
     
     @app_commands.command(name='add-pixels', description='Add pixels to a user.')
     @app_commands.describe(user='The user to add pixels to.', canvas='Canvas number (no c).', pixels='Amount placed.')
-    async def database_add(self, interaction: discord.Interaction, user: str, canvas: int, pixels: int):
-        if interaction.user.id == 313264660826685440:
-            query = "INSERT INTO points VALUES (?, ?, ?)"
-            cursor.execute(query, (user, canvas, pixels))
-            database.commit()
-            await interaction.response.send_message("Added!")
-        else:
-            await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+    async def pixels_db_add(self, interaction: discord.Interaction, user: str, canvas: str, pixels: int):
+        query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)" # the three question marks represents the above "user", "canvas", and "pixels"
+        try:
+            if interaction.user.id == 313264660826685440:
+                if not re.fullmatch(r'^(?![cC])[a-z0-9]+$', canvas):
+                    await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
+                    return
+                cursor.execute(query, (user, canvas, pixels)) # the reason we define query is to make sure cursor.execute isn't Huge
+                database.commit()
+                await interaction.response.send_message("Added!")
+            else:
+                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, ping Temriel.', ephemeral=True)
+            print(f'An error occurred: {e}')
 
     @app_commands.command(name='lookup', description='See how many pixels a certain user has placed for us.')
     @app_commands.describe(profile='Who do you want to look up?')
-    async def database_lookup(self, interaction: discord.Interaction, profile: str):
+    async def pixels_db_lookup(self, interaction: discord.Interaction, profile: str):
         get_users = "SELECT SUM(pixels) FROM points WHERE user=?"
         cursor.execute(get_users, (profile,))
         total = cursor.fetchone()[0]
         if total is None:
             total = 0
         await interaction.response.send_message(f"**{profile}** has placed **{total}** pixels for us. They have the rank of **placeholder**.")
+        # the placeholder above will be calculated to look at a users role eventually, yes this will probably be TPE specific at first :3
 
     @app_commands.command(name='list', description='See how much people have placed for us.')
-    async def database_list(self, interaction: discord.Interaction):
-        get_users_all = "SELECT user, SUM(pixels) as total_all FROM points GROUP BY user ORDER BY total_all DESC"
-        cursor.execute(get_users_all)
-        all_pixels = cursor.fetchall()
+    async def pixels_db_list(self, interaction: discord.Interaction):
+        get_users_all = "SELECT user, SUM(pixels) as total_all FROM points GROUP BY user ORDER BY total_all DESC" # in short, selects the "points" table, gets the users on that table, sums up all "pixels" associated with each user, and orders them by pixels
+        cursor.execute(get_users_all) # does the above
+        all_pixels = cursor.fetchall() # defines all_pixels to be the thing we got from the database
         if not all_pixels:
             await interaction.response.send_message("No pixels or users found.")
-            return
+            return # self explanatory but if "all_pixels" is empty it returns this. I love error handling :3  
 
-        font_path = "font.ttf"
+        font_path = "font.ttf" # can be any font, though you might have to change around the font sizes for this to make sense
         font_size = 24
         font = ImageFont.truetype(font_path, font_size)
         spacing = 30
@@ -67,7 +76,7 @@ class db(commands.Cog):
         draw = ImageDraw.Draw(image)
 
         headers = ["Rank", "Username", "Pixels"]
-        header_positions = [50, min_username_x + username_spacing // 2, username_spacing + pixels_spacing // 2 - min_username_x]
+        header_positions = [50, min_username_x + username_spacing // 2, username_spacing + pixels_spacing // 2 - min_username_x] # decides spacing for the headers, kinda needs to be manually adjusted
         for header, pos in zip(headers, header_positions):
             header_bbox = draw.textbbox((0, 0), header, font=font)
             header_width = header_bbox[2] - header_bbox[0]
@@ -90,7 +99,7 @@ class db(commands.Cog):
             draw.text((header_positions[2] - pixels_width / 2, y_text), pixels_text, fill="white", font=font)
             y_text += spacing
 
-        with io.BytesIO() as image_binary:
+        with io.BytesIO() as image_binary: # below sends the embed w/ the image
             image.save(image_binary, 'PNG')
             image_binary.seek(0)
             file = discord.File(fp=image_binary, filename='leaderboard.png')
