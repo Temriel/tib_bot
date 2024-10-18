@@ -66,4 +66,4 @@ async def main():
     await load()
 
 asyncio.run(main())
-bot.run(os.getenv("BOT_TOKEN"), log_handler=handler)
+bot.run(os.getenv("bot_token"), log_handler=handler)

@@ -53,7 +53,7 @@ class db(commands.Cog):
         cursor.execute(get_users_all) # does the above
         all_pixels = cursor.fetchall() # defines all_pixels to be the thing we got from the database
         if not all_pixels:
-            await interaction.response.send_message("No pixels or users found.")
+            await interaction.response.send_message('No pixels or users found.')
             return # self explanatory but if "all_pixels" is empty it returns this. I love error handling :3  
 
         font_path = "font.ttf" # can be any font, though you might have to change around the font sizes for this to make sense
