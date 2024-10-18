@@ -76,6 +76,7 @@ class placemap(commands.Cog):
             user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
             filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log', '--output', user_log_file]
             filter_result = subprocess.run(filter_cli, capture_output=True, text=True)
+            print(f'Generating placemap for {user.id} on canvas {canvas}.')
             print(f'Subprocess output: {filter_result.stdout}')
             print(f'Subprocess error: {filter_result.stderr}')
             if filter_result.returncode != 0:
