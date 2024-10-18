@@ -2,8 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import sqlite3
-from PIL import Image, ImageDraw, ImageFont
-import io
+import config
 import os
 import subprocess
 import re
@@ -57,10 +56,12 @@ class placemap(commands.Cog):
         await interaction.response.defer()
         get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
         user = interaction.user
+        bg, palette_path, output_path = config.paths(canvas, user.id)
+        ple_dir = config.pxlslog_explorer_dir
         cursor.execute(get_key, (canvas, user.id)) # does the above
         user_key = cursor.fetchone()
         if not user_key:
-            await interaction.followup.send("No log key found for this canvas.")
+            await interaction.followup.send(f'No log key found for this canvas.')
             return
 
         if not re.fullmatch(r'^(?![cC])[a-z0-9]+$', canvas):
@@ -72,21 +73,24 @@ class placemap(commands.Cog):
             return
 
         try:
-            if not os.path.isfile('./generate.sh'):
-                raise FileNotFoundError(f'Generative script not found.')
-            if not os.access('./generate.sh', os.X_OK):
-                os.chmod('./generate.sh', 0o755) 
-            command = list(map(str, ['C:/Program Files/Git/bin/bash.exe', './generate.sh', str(canvas), str(user.id), str(user_key)])) # change depending on path (or if you actually get a not-absolute path to work then please do tell xD)
-#            print(f'Final command list: {command}') # these are for error handling
-#            print(f'Command element types: {[type(arg) for arg in command]}') #this one too
-            result = subprocess.run(command, capture_output=True, text=True)
-            print(f'Subprocess output: {result.stdout}')
-            print(f'Subprocess error: {result.stderr}')
-            output = f'D:/pxlslog-explorer/target/release/pxls-out-tib' # change depending on path
+            user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
+            filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log', '--output', user_log_file]
+            filter_result = subprocess.run(filter_cli, capture_output=True, text=True)
+            print(f'Subprocess output: {filter_result.stdout}')
+            print(f'Subprocess error: {filter_result.stderr}')
+            if filter_result.returncode != 0:
+                await interaction.followup.send(f'Something went wrong when generating the log file! Ping Temriel.')
+                return
+            
+            render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, 'normal']
+            render_result = subprocess.run(render_cli, capture_output=True, text=True)
+            print(f'Subprocess output: {render_result.stdout}')
+            print(f'Subprocess error: {render_result.stderr}')
+            # print(f'Final command list: {render_cli}') # error handling
             filename = f'c{canvas}_normal_{user.id}.png'
-            path = os.path.join(output, filename)
+            path = output_path
 
-            if result.returncode == 0:
+            if render_result.returncode == 0:
                 file = discord.File(path, filename=filename)
                 embed = discord.Embed(title='Your placemap', color=discord.Color.purple())
                 embed.set_image(url=f'attachment://{filename}')
