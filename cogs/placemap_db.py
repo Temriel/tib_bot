@@ -24,8 +24,23 @@ class placemap(commands.Cog):
 
     @group.command(name='add', description='Add a log key.') # adds a log key to the database using a fancy ass modal
     async def placemap_db_add(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title='Add your log key', 
+            description='''
+            Here you can easily add your log key to the bot for placemap processing.
+            You can find your log keys here: https://pxls.space/profile?action=data
+            ''',
+            color=discord.Color.purple()
+            )
+        button = discord.ui.Button(label='Add Log Key', style=discord.ButtonStyle.primary)
+        button.callback = self.open_modal
+        view = discord.ui.View()
+        view.add_item(button)
+        await interaction.response.send_message(embed=embed, view=view)
+    async def open_modal(self, interaction: discord.Interaction):
         modal = self.placemap_db_add_modal()
         await interaction.response.send_modal(modal)
+
     class placemap_db_add_modal(discord.ui.Modal, title='Add your log key.'):
         canvas = discord.ui.TextInput(label='Canvas Number', placeholder='Add canvas number (eg, 28 or 56a).')
         key = discord.ui.TextInput(label='Log key (512 char)', style=discord.TextStyle.paragraph, max_length=512, min_length=512)
@@ -43,7 +58,7 @@ class placemap(commands.Cog):
             try:
                 cursor.execute(query, (user.id, self.canvas.value, self.key.value)) # we use user.id to store the ID instead of the user string - das bad
                 database.commit()
-                print(f'Log key added for {user.id} on canvas {self.canvas.value}.')
+                print(f'Log key added for {user} ({user.id}) on canvas {self.canvas.value}.')
                 await interaction.response.send_message("Added key!")
             except sqlite3.OperationalError as e:
                 await interaction.response.send_message('Error! Something went wrong, ping Temriel.', ephemeral=True)
@@ -78,7 +93,7 @@ class placemap(commands.Cog):
             user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
             filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log', '--output', user_log_file]
             filter_result = subprocess.run(filter_cli, capture_output=True, text=True)
-            print(f'Filtering {user_key} for {user.id} on canvas {canvas}.')
+            print(f'Filtering {user_key} for {user} on canvas {canvas}.')
             print(f'Subprocess output: {filter_result.stdout}')
             print(f'Subprocess error: {filter_result.stderr}')
             if filter_result.returncode != 0:
@@ -99,7 +114,7 @@ class placemap(commands.Cog):
 
             render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, 'normal']
             render_result = subprocess.run(render_cli, capture_output=True, text=True)
-            print(f'Generating placemap for {user.id} on canvas {canvas}.')
+            print(f'Generating placemap for {user} on canvas {canvas}.')
             print(f'Subprocess output: {render_result.stdout}')
             print(f'Subprocess error: {render_result.stderr}')
             # print(f'Final command list: {render_cli}') # error handling
