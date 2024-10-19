@@ -6,6 +6,7 @@ import config
 import os
 import subprocess
 import re
+import time
 
 database = sqlite3.connect('database.db')
 cursor = database.cursor()
@@ -54,6 +55,7 @@ class placemap(commands.Cog):
     @group.command(name='generate', description='Generate a placemap from a log key.')
     async def placemap_db_generate(self, interaction: discord.Interaction, canvas: str):
         await interaction.response.defer()
+        start_time = time.time()
         get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
         user = interaction.user
         bg, palette_path, output_path = config.paths(canvas, user.id)
@@ -76,15 +78,28 @@ class placemap(commands.Cog):
             user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
             filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log', '--output', user_log_file]
             filter_result = subprocess.run(filter_cli, capture_output=True, text=True)
-            print(f'Generating placemap for {user.id} on canvas {canvas}.')
+            print(f'Filtering {user_key} for {user.id} on canvas {canvas}.')
             print(f'Subprocess output: {filter_result.stdout}')
             print(f'Subprocess error: {filter_result.stderr}')
             if filter_result.returncode != 0:
                 await interaction.followup.send(f'Something went wrong when generating the log file! Ping Temriel.')
                 return
             
+            place = 0
+            undo = 0
+            with open(user_log_file, 'r') as log_file:
+                for line in log_file:
+                    if 'user place' in line:
+                        place += 1
+                    elif 'user undo' in line:
+                        undo += 1
+            total_pixels = place - undo
+            print(f'{place} pixels placed.')
+            print(f'{undo} pixels undone.')
+
             render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, 'normal']
             render_result = subprocess.run(render_cli, capture_output=True, text=True)
+            print(f'Generating placemap for {user.id} on canvas {canvas}.')
             print(f'Subprocess output: {render_result.stdout}')
             print(f'Subprocess error: {render_result.stderr}')
             # print(f'Final command list: {render_cli}') # error handling
@@ -92,9 +107,17 @@ class placemap(commands.Cog):
             path = output_path
 
             if render_result.returncode == 0:
+                end_time = time.time()
+                elapsed_time = end_time - start_time
                 file = discord.File(path, filename=filename)
-                embed = discord.Embed(title='Your placemap', color=discord.Color.purple())
+                embed = discord.Embed(
+                    title=f'Your placemap for canvas {canvas}', 
+                    description=f"**Pixels placed:** {total_pixels}\n**Undo's:** {undo}", 
+                    color=discord.Color.purple()
+                    )
+                embed.set_author(name=user.global_name, icon_url=user.avatar.url)
                 embed.set_image(url=f'attachment://{filename}')
+                embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
                 await interaction.followup.send(embed=embed, file=file)
             else:
                 await interaction.followup.send(f'An error occurred! Ping Temriel.')
