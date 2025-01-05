@@ -24,10 +24,12 @@ class db(commands.Cog):
         query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)" # the three question marks represents the above "user", "canvas", and "pixels"
         try:
             if interaction.user.id == 313264660826685440:
-                if not re.fullmatch(r'^(?![cC])[a-z0-9]+$', canvas):
+                if not isinstance(canvas, str):
+                    canvas = str(canvas)
+                if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
                     await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
                     return
-                cursor.execute(query, (user, canvas, pixels)) # the reason we define query is to make sure cursor.execute isn't Huge
+                cursor.execute(query, (str(user), canvas, pixels)) # the reason we define query is to make sure cursor.execute isn't Huge
                 database.commit()
                 await interaction.response.send_message("Added!")
             else:

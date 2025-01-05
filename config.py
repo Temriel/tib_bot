@@ -1,4 +1,4 @@
-default_palette = "13" # REMINDER to change this
+default_palette = 13 # REMINDER to change this
 pxlslog_explorer_dir = f"D:/pxlslog-explorer/target/release"
 
 def get_palette(canvas: str):
@@ -27,7 +27,7 @@ def get_palette(canvas: str):
             return 11
         case "61"|"62"|"63"|"64"|"64a"|"65"|"65a"|"66"|"67"|"67a"|"68"|"69"|"70"|"71"|"72"|"73"|"74"|"75":
             return 12
-        case "76"|"77"|"78"|"78a"|"79"|"80"|"81"|"82"|"83"|"84":
+        case "76"|"77"|"78"|"78a"|"79"|"80"|"81"|"82"|"83"|"84"|"85":
             return 13
         case "21a":
             return "gimmick_1"
@@ -36,7 +36,7 @@ def get_palette(canvas: str):
         case "56a":
             return "gimmick_3"
         case _:
-            return "default_palette"
+            return default_palette # change default palette lole
 
 def paths(canvas: str, user: int):
     palette = get_palette(canvas)
@@ -45,3 +45,12 @@ def paths(canvas: str, user: int):
     output_dir = f"{pxlslog_explorer_dir}/pxls-out-tib"
     output_path = f"{output_dir}/c{canvas}_normal_{user}.png"
     return bg, palette_path, output_path
+
+def tpe(canvas: str):
+    tpe_canvas = [
+        "51", "52", "53", "54", "55", # before che
+        "57", "58", "59", "60", "61", "63", "66", "68", "77", "78a", # during che
+        "81", "82", "83", "84", "85", "86", "87"  # after che, expand with new canvases
+        ]
+    tpe_present = canvas.strip() in tpe_canvas
+    return tpe_present
