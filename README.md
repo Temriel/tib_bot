@@ -5,4 +5,4 @@ Currently, it can write to a database and retrieve information about 1 user at a
 
 If you want to use this bot, you can find us [here](https://discord.gg/vzB8DZAkpA).
 
-The entirety of the placemap utility is currently run using the pxlslog-explorer, made by Etos2. You can find it [here](https://github.com/Etos2/pxlslog-explorer).
+The entirety of the placemap utility is currently run using the pxlslog-explorer, made by Etos2. You can find it [here](https://github.com/Etos2/pxlslog-explorer). This bot runs using [this version](https://github.com/Etos2/pxlslog-explorer/tree/6deef7cf38498da3a13095b8eb873938a294b202).
