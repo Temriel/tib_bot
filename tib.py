@@ -4,6 +4,8 @@ from discord.ext import commands
 import os
 from dotenv import load_dotenv
 import logging
+import config
+import importlib
 
 load_dotenv()
 
@@ -12,6 +14,8 @@ handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w'
 intents = discord.Intents.none()
 bot = commands.Bot(command_prefix='>', intents=intents)
 tree = bot.tree
+
+owner_id = config.owner()
 
 @bot.event
 async def on_ready():
@@ -27,7 +31,7 @@ async def load():
 
 @tree.command(name='shutdown', description='Shut down the bot.')
 async def shutdown(interaction: discord.Interaction):
-    if interaction.user.id == 313264660826685440:
+    if interaction.user.id == owner_id:
         await interaction.response.send_message("Shutting down...")
         await bot.close()
     else:
@@ -35,7 +39,7 @@ async def shutdown(interaction: discord.Interaction):
 
 @tree.command(name='sync', description='Sync.')
 async def sync(interaction: discord.Interaction):
-    if interaction.user.id == 313264660826685440:
+    if interaction.user.id == owner_id:
         fmt = await tree.sync()
         await interaction.response.send_message('Synced commands.', ephemeral=True)
         print(f'Synced {len(fmt)} commands globally.')
@@ -44,21 +48,25 @@ async def sync(interaction: discord.Interaction):
 
 @tree.command(name='reload-cogs', description='Reload the cogs.')
 async def reload_cogs(interaction: discord.Interaction):
-    if interaction.user.id == 313264660826685440:
+    if interaction.user.id == owner_id:
         reload = []
+        importlib.reload(config)
+        # reload.append(f'Config successfully reloaded.') # doesn't seem to work
+        print('config successfully reloaded.')
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py'):
                 try:
                     await bot.reload_extension(f'cogs.{filename[:-3]}')
-                    print(f'{filename[:-3]} successfully re-loaded.')
-                    reload.append(f'{filename[:-3]} successfully re-loaded.')
+                    print(f'{filename[:-3]} successfully reloaded.')
+                    reload.append(f'{filename[:-3]} successfully reloaded.')
                 except Exception as e:
                     print(f'Failed to reload {filename[:-3]}: {e}')
                     reload.append(f'Failed to reload {filename[:-3]}, check terminal.')
         if reload:
-            await interaction.response.send_message('\n'.join(reload), ephemeral=True)
+            message = '\n'.join(reload)
         else:
-            await interaction.response.send_message('No cogs found.', ephemeral=True)
+            message = 'No cogs found.'
+        await interaction.response.send_message(message, ephemeral=True)
     else:
         await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 

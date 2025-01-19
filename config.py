@@ -1,6 +1,10 @@
 default_palette = 13 # REMINDER to change this
 pxlslog_explorer_dir = f"D:/pxlslog-explorer/target/release"
 
+def owner():
+    owner_id = 313264660826685440
+    return owner_id
+
 def get_palette(canvas: str):
     match canvas:
         case "1"|"2":

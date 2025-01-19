@@ -5,10 +5,13 @@ import sqlite3
 from PIL import Image, ImageDraw, ImageFont
 import io
 import re
+import config
 
 database = sqlite3.connect('database.db')
 cursor = database.cursor()
 database.execute('CREATE TABLE IF NOT EXISTS points(user STR, canvas STR, pixels INT, PRIMARY KEY (user, canvas))')
+
+owner_id = config.owner()
 
 class db(commands.Cog):
     def __init__(self, client):
@@ -23,7 +26,7 @@ class db(commands.Cog):
     async def pixels_db_add(self, interaction: discord.Interaction, user: str, canvas: str, pixels: int):
         query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)" # the three question marks represents the above "user", "canvas", and "pixels"
         try:
-            if interaction.user.id == 313264660826685440:
+            if interaction.user.id == owner_id:
                 if not isinstance(canvas, str):
                     canvas = str(canvas)
                 if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):

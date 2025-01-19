@@ -6,12 +6,15 @@ import config
 import subprocess
 import re
 import time
-from collections import defaultdict
+import asyncio
+# from collections import defaultdict
 # from PIL import image
 
 database = sqlite3.connect('database.db')
 cursor = database.cursor()
 database.execute('CREATE TABLE IF NOT EXISTS logkey(user INT, canvas STR, key STR, PRIMARY KEY (user, canvas))')
+
+semaphore = asyncio.Semaphore(3)
 
 class placemap(commands.Cog):
     def __init__(self, client):
@@ -30,6 +33,7 @@ class placemap(commands.Cog):
             description='''
             Here you can easily add your log key to the bot for placemap processing.
             You can find your log keys here: https://pxls.space/profile?action=data
+            Once the log keys have been added to the bot, you can run `/logkey generate` to make your placemaps!
             ''',
             color=discord.Color.purple()
             )
@@ -73,87 +77,88 @@ class placemap(commands.Cog):
 
     @group.command(name='generate', description='Generate a placemap from a log key.')
     async def placemap_db_generate(self, interaction: discord.Interaction, canvas: str):
-        await interaction.response.defer()
-        start_time = time.time()
-        get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
-        user = interaction.user
-        bg, palette_path, output_path = config.paths(canvas, user.id)
-        ple_dir = config.pxlslog_explorer_dir
-        cursor.execute(get_key, (canvas, user.id)) # does the above
-        user_key = cursor.fetchone()
+        await interaction.response.defer(ephemeral=False,thinking=True)
+        async with semaphore:
+            start_time = time.time()
+            get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
+            user = interaction.user
+            bg, palette_path, output_path = config.paths(canvas, user.id)
+            ple_dir = config.pxlslog_explorer_dir
+            cursor.execute(get_key, (canvas, user.id)) # does the above
+            user_key = cursor.fetchone()
 
-        if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
-            await interaction.followup.send('Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.', ephemeral=True)
-            return
-        user_key = user_key[0]
-        if not re.fullmatch(r'[a-z0-9]{512}', user_key):
-            await interaction.followup.send('Invalid format! A log key can only contain a-z, and 0-9.', ephemeral=True)
-            return
-        if not user_key:
-            await interaction.followup.send(f'No log key found for this canvas.')
-            return
-
-        try:
-            user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
-            filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log', '--output', user_log_file]
-            filter_result = subprocess.run(filter_cli, capture_output=True, text=True)
-            print(f'Filtering {user_key} for {user} on canvas {canvas}.')
-            print(f'Subprocess output: {filter_result.stdout}')
-            print(f'Subprocess error: {filter_result.stderr}')
-            if filter_result.returncode != 0:
-                await interaction.followup.send(f'Something went wrong when generating the log file! Ping Temriel.')
+            if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+                await interaction.followup.send('Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.', ephemeral=True)
                 return
+            user_key = user_key[0]
+            if not re.fullmatch(r'[a-z0-9]{512}', user_key):
+                await interaction.followup.send('Invalid format! A log key can only contain a-z, and 0-9.', ephemeral=True)
+                return
+            if not user_key:
+                await interaction.followup.send(f'No log key found for this canvas.')
+                return
+
+            try:
+                user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
+                filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log', '--output', user_log_file]
+                filter_result = subprocess.run(filter_cli, capture_output=True, text=True)
+                print(f'Filtering {user_key} for {user} on canvas {canvas}.')
+                print(f'Subprocess output: {filter_result.stdout}')
+                print(f'Subprocess error: {filter_result.stderr}')
+                if filter_result.returncode != 0:
+                    await interaction.followup.send(f'Something went wrong when generating the log file! Ping Temriel.')
+                    return
             
-            place = 0
-            undo = 0
-            # activity = defaultdict(int)
-            with open(user_log_file, 'r') as log_file:
-                for line in log_file:
-                    # fields = re.split(r'\s+', line.strip())
-                    # _, _, _, x, y, _, _, _ = fields
-                    # coord = (int(x), int(y))
-                    if 'user place' in line:
-                        place += 1
-                        # activity[coord] += 1
-                    elif 'user undo' in line:
-                        undo += 1
-                        # activity[coord] -= 1
+                place = 0
+                undo = 0
+                # activity = defaultdict(int)
+                with open(user_log_file, 'r') as log_file:
+                    for line in log_file:
+                        # fields = re.split(r'\s+', line.strip())
+                        # _, _, _, x, y, _, _, _ = fields
+                        # coord = (int(x), int(y))
+                        if 'user place' in line:
+                            place += 1
+                            # activity[coord] += 1
+                        elif 'user undo' in line:
+                            undo += 1
+                            # activity[coord] -= 1
 
-            total_pixels = place - undo
-            # most_activity = sorted(activity.items(), key=lambda item: item[1], reverse=True)
-            print(f'{total_pixels} pixels placed.')
-            print(f'{undo} pixels undone.')
-            # print(f'Most active pixel: {most_activity}')
+                total_pixels = place - undo
+                # most_activity = sorted(activity.items(), key=lambda item: item[1], reverse=True)
+                print(f'{total_pixels} pixels placed.')
+                print(f'{undo} pixels undone.')
+                # print(f'Most active pixel: {most_activity}')
 
-            render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, 'normal']
-            render_result = subprocess.run(render_cli, capture_output=True, text=True)
-            print(f'Generating placemap for {user} on canvas {canvas}.')
-            print(f'Subprocess output: {render_result.stdout}')
-            print(f'Subprocess error: {render_result.stderr}')
-            # print(f'Final command list: {render_cli}') # use for error handling
-            filename = f'c{canvas}_normal_{user.id}.png'
-            path = output_path
+                render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, 'normal']
+                render_result = subprocess.run(render_cli, capture_output=True, text=True)
+                print(f'Generating placemap for {user} on canvas {canvas}.')
+                print(f'Subprocess output: {render_result.stdout}')
+                print(f'Subprocess error: {render_result.stderr}')
+                # print(f'Final command list: {render_cli}') # use for error handling
+                filename = f'c{canvas}_normal_{user.id}.png'
+                path = output_path
 
-            # function that checks if pixel matches tpe
+                # function that checks if pixel matches tpe
 
-            if render_result.returncode == 0:
-                end_time = time.time()
-                elapsed_time = end_time - start_time
-                file = discord.File(path, filename=filename)
-                embed = discord.Embed(
-                    title=f'Your Placemap for Canvas {canvas}', 
-                    description=f"**Pixels placed:** {total_pixels}\n**Undos:** {undo}", 
-                    color=discord.Color.purple()
-                    )
-                embed.set_author(name=user.global_name, icon_url=user.avatar.url)
-                embed.set_image(url=f'attachment://{filename}')
-                embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
-                await interaction.followup.send(embed=embed, file=file)
-            else:
-                await interaction.followup.send(f'An error occurred! Ping Temriel.')
-        except Exception as e:
-            await interaction.followup.send(f'An error occurred! Check the logs.')
-            print(f'An error occurred: {e}')
+                if render_result.returncode == 0:
+                    end_time = time.time()
+                    elapsed_time = end_time - start_time
+                    file = discord.File(path, filename=filename)
+                    embed = discord.Embed(
+                        title=f'Your Placemap for Canvas {canvas}', 
+                        description=f"**Pixels placed:** {total_pixels}\n**Undos:** {undo}", 
+                        color=discord.Color.purple()
+                        )
+                    embed.set_author(name=user.global_name, icon_url=user.avatar.url)
+                    embed.set_image(url=f'attachment://{filename}')
+                    embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
+                    await interaction.followup.send(embed=embed, file=file)
+                else:
+                    await interaction.followup.send(f'An error occurred! Ping Temriel.')
+            except Exception as e:
+                await interaction.followup.send(f'An error occurred! Check the logs.')
+                print(f'An error occurred: {e}')
 
 async def setup(client):
     await client.add_cog(placemap(client))
