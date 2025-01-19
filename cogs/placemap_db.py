@@ -101,10 +101,13 @@ class placemap(commands.Cog):
             try:
                 user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
                 filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log', '--output', user_log_file]
-                filter_result = subprocess.run(filter_cli, capture_output=True, text=True)
+                filter_result = await asyncio.create_subprocess_exec(
+                    *filter_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
                 print(f'Filtering {user_key} for {user} on canvas {canvas}.')
-                print(f'Subprocess output: {filter_result.stdout}')
-                print(f'Subprocess error: {filter_result.stderr}')
+                stdout, stderr = await filter_result.communicate()
+                print(f'Subprocess output: {stdout}')
+                print(f'Subprocess error: {stderr}')
                 if filter_result.returncode != 0:
                     await interaction.followup.send(f'Something went wrong when generating the log file! Ping Temriel.')
                     return
@@ -131,10 +134,14 @@ class placemap(commands.Cog):
                 # print(f'Most active pixel: {most_activity}')
 
                 render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, 'normal']
-                render_result = subprocess.run(render_cli, capture_output=True, text=True)
+                # render_result = subprocess.run(render_cli, capture_output=True, text=True)
+                render_result = await asyncio.create_subprocess_exec(
+                    *render_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
                 print(f'Generating placemap for {user} on canvas {canvas}.')
-                print(f'Subprocess output: {render_result.stdout}')
-                print(f'Subprocess error: {render_result.stderr}')
+                stdout, stderr = await render_result.communicate()
+                print(f'Subprocess output: {stdout}')
+                print(f'Subprocess error: {stderr}')
                 # print(f'Final command list: {render_cli}') # use for error handling
                 filename = f'c{canvas}_normal_{user.id}.png'
                 path = output_path
