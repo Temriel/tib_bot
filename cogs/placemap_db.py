@@ -22,7 +22,7 @@ class placemap(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        print('Key DB cog loaded.')
+        print('Key DB cog loaded')
 
     group = app_commands.Group(name="logkey", description="Add your log key or make a placemap from it :3")
 
@@ -114,31 +114,23 @@ class placemap(commands.Cog):
             
                 place = 0
                 undo = 0
-                # activity = defaultdict(int)
                 with open(user_log_file, 'r') as log_file:
                     for line in log_file:
-                        # fields = re.split(r'\s+', line.strip())
-                        # _, _, _, x, y, _, _, _ = fields
-                        # coord = (int(x), int(y))
                         if 'user place' in line:
                             place += 1
-                            # activity[coord] += 1
                         elif 'user undo' in line:
                             undo += 1
-                            # activity[coord] -= 1
 
                 total_pixels = place - undo
-                # most_activity = sorted(activity.items(), key=lambda item: item[1], reverse=True)
-                print(f'{total_pixels} pixels placed.')
-                print(f'{undo} pixels undone.')
-                # print(f'Most active pixel: {most_activity}')
+                print(f'{total_pixels} pixels placed')
+                print(f'{undo} pixels undone')
 
                 render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, 'normal']
-                # render_result = subprocess.run(render_cli, capture_output=True, text=True)
+                # render_result = subprocess.run(render_cli, capture_output=True, text=True) # use for error handling
                 render_result = await asyncio.create_subprocess_exec(
                     *render_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
-                print(f'Generating placemap for {user} on canvas {canvas}.')
+                print(f'Generating placemap for {user} on canvas {canvas}')
                 stdout, stderr = await render_result.communicate()
                 print(f'Subprocess output: {stdout}')
                 print(f'Subprocess error: {stderr}')

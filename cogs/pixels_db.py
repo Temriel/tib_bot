@@ -34,7 +34,8 @@ class db(commands.Cog):
                     return
                 cursor.execute(query, (str(user), canvas, pixels)) # the reason we define query is to make sure cursor.execute isn't Huge
                 database.commit()
-                await interaction.response.send_message("Added!")
+                await interaction.response.send_message(f"Added {pixels} pixels for {user} on c{canvas}!")
+                print (f"Added {pixels} pixels for {user} on canvas {canvas}")
             else:
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
         except Exception as e:
@@ -49,8 +50,13 @@ class db(commands.Cog):
         total = cursor.fetchone()[0]
         if total is None:
             total = 0
-        await interaction.response.send_message(f"**{profile}** has placed **{total}** pixels for us. They have the rank of **placeholder**.")
-        # the placeholder above will be calculated to look at a users role eventually, yes this will probably be TPE specific at first :3
+        ranks = config.ranks()
+        rank = "nothing"
+        for threshold, name in ranks:
+            if total >= threshold:
+                rank = name
+                break
+        await interaction.response.send_message(f"**{profile}** has placed **{total}** pixels for us. They have the rank of **{rank}**.")
 
     @app_commands.command(name='list', description='See how much people have placed for us.')
     async def pixels_db_list(self, interaction: discord.Interaction):

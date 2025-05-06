@@ -47,6 +47,7 @@ class commander(commands.Cog):
             embed = discord.Embed(title=f'Canvas {canvas}, {displayed}.', )
             embed.set_image(url=f'attachment://{filename}')
             await interaction.followup.send(embed=embed, file=file)
+            print(f'Sending canvas {canvas}, {displayed}')
         except Exception as e:
             await interaction.followup.send(f'Log files are... weird for c6, c17, c28, and c30a. If this error occured when trying to view those canvases, Tem knows about it already xd. If it was unrelated to those four, please ping Temriel!', ephemeral=True)
             print(f'An error occurred: {e}')

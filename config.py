@@ -54,7 +54,19 @@ def tpe(canvas: str):
     tpe_canvas = [
         "51", "52", "53", "54", "55", # before che
         "57", "58", "59", "60", "61", "63", "66", "68", "77", "78a", # during che
-        "81", "82", "83", "84", "85", "86", "87"  # after che, expand with new canvases
+        "81", "82", "83", "84", "85", "86", "87", "88", "88a", "89", "90"  # after che, expand with new canvases
         ]
     tpe_present = canvas.strip() in tpe_canvas
     return tpe_present
+
+def ranks():
+    return [
+        (150000, "Admiral"),
+        (100000, "General"),
+        (75000, "Colonel"),
+        (50000, "Major"),
+        (30000, "Captain"),
+        (15000, "Sergeant"),
+        (5000, "Corporal"),
+        (1000, "Private"),
+    ]
