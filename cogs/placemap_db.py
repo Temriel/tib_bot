@@ -149,7 +149,10 @@ class placemap(commands.Cog):
                         description=f"**Pixels placed:** {total_pixels}\n**Undos:** {undo}", 
                         color=discord.Color.purple()
                         )
-                    embed.set_author(name=user.global_name, icon_url=user.avatar.url)
+                    embed.set_author(
+                        name=user.global_name or user.name, 
+                        icon_url=user.avatar.url if user.avatar else user.default_avatar.url
+                        )
                     embed.set_image(url=f'attachment://{filename}')
                     embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
                     await interaction.followup.send(embed=embed, file=file)

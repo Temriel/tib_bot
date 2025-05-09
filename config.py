@@ -65,7 +65,7 @@ def ranks():
         (100000, "General"),
         (75000, "Colonel"),
         (50000, "Major"),
-        (30000, "Captain"),
+        (30000, "Sergeant Major"),
         (15000, "Sergeant"),
         (5000, "Corporal"),
         (1000, "Private"),
