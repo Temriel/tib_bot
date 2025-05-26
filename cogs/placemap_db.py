@@ -3,12 +3,12 @@ from discord import app_commands
 from discord.ext import commands
 import sqlite3
 import config
-import subprocess
+# import subprocess # for error handling
 import re
 import time
 import asyncio
 # from collections import defaultdict
-# from PIL import image
+# from PIL import image 
 
 database = sqlite3.connect('database.db')
 cursor = database.cursor()
@@ -87,15 +87,15 @@ class placemap(commands.Cog):
             cursor.execute(get_key, (canvas, user.id)) # does the above
             user_key = cursor.fetchone()
 
+            if not user_key:
+                await interaction.followup.send(f'No log key found for this canvas.')
+                return
             if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
                 await interaction.followup.send('Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.', ephemeral=True)
                 return
             user_key = user_key[0]
             if not re.fullmatch(r'[a-z0-9]{512}', user_key):
                 await interaction.followup.send('Invalid format! A log key can only contain a-z, and 0-9.', ephemeral=True)
-                return
-            if not user_key:
-                await interaction.followup.send(f'No log key found for this canvas.')
                 return
 
             try:
@@ -120,7 +120,6 @@ class placemap(commands.Cog):
                             place += 1
                         elif 'user undo' in line:
                             undo += 1
-
                 total_pixels = place - undo
                 print(f'{total_pixels} pixels placed')
                 print(f'{undo} pixels undone')

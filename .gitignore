@@ -4,7 +4,7 @@
 *.ttf
 .vscode
 *.bat 
-final_template
+*.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

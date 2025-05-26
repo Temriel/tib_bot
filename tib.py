@@ -74,4 +74,7 @@ async def main():
     await load()
 
 asyncio.run(main())
-bot.run(os.getenv("bot_token"), log_handler=handler)
+token = os.getenv("bot_token")
+if not token:
+    raise ValueError("No token found in .env file.")
+bot.run(token, log_handler=handler)

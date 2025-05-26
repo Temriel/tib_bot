@@ -2,6 +2,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import config
+from typing import Optional
+import re
 
 class commander(commands.Cog):
     def __init__(self, client):
@@ -37,20 +39,26 @@ class commander(commands.Cog):
         app_commands.Choice(name='Combined', value='combined'),
         ]
     )
-    async def canvas(self, interaction: discord.Interaction, canvas: str, display: app_commands.Choice[str] = None):
+    async def canvas(self, interaction: discord.Interaction, canvas: str, display: Optional[app_commands.Choice[str]] = None):
         displayed = display.value if display else 'final'
         await interaction.response.defer(ephemeral=False, thinking=True)
         try:
+            if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+                await interaction.followup.send('Invalid format, canvases may not begin with c.', ephemeral=True)
+                return
             filename = f'canvas-{canvas}_{displayed}.png'
             path = f'{config.pxlslog_explorer_dir}/pxls-final-canvas/canvas-{canvas}-{displayed}.png'
             file = discord.File(path, filename=filename)
-            embed = discord.Embed(title=f'Canvas {canvas}, {displayed}.', )
+            embed = discord.Embed(title=f'Canvas {canvas}, {displayed}', )
             embed.set_image(url=f'attachment://{filename}')
             await interaction.followup.send(embed=embed, file=file)
             print(f'Sending canvas {canvas}, {displayed}')
         except Exception as e:
-            await interaction.followup.send(f'Log files are... weird for c6, c17, c28, and c30a. If this error occured when trying to view those canvases, Tem knows about it already xd. If it was unrelated to those four, please ping Temriel!', ephemeral=True)
-            print(f'An error occurred: {e}')
+            if canvas  in ['6','17','28','30a']:
+                await interaction.followup.send('Log files are... weird for c6, c17, c28, and c30a, and thus final images are not available.', ephemeral=True)
+            else: 
+                await interaction.followup.send(f'No log files available.', ephemeral=True)
+                print(f'An error occurred: {e}')
 
 async def setup(client):
     await client.add_cog(commander(client))
