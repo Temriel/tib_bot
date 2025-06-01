@@ -5,6 +5,23 @@ import config
 from typing import Optional
 import re
 
+COG_CATEGORIES = {
+    'db': 'TPE Leaderboards',
+    'placemap': 'Placemap Commands',
+    'commander': 'General Commands',
+}
+
+def bot_commands(commands, parent_name=''):
+    command_list = []
+    for command in commands:
+        full_name = f'{parent_name} {command.name}'.strip()
+        if isinstance(command, app_commands.Group):
+            command_list.extend(bot_commands(command.commands, parent_name=full_name))
+        else:
+            description = command.description or 'No description provided.'
+            command_list.append((f'/{full_name}', description))
+    return command_list
+
 class commander(commands.Cog):
     def __init__(self, client):
         self.client = client
@@ -21,6 +38,29 @@ class commander(commands.Cog):
     async def ping(self, interaction: discord.Interaction):
         bot_latency = round(self.client.latency * 1000)
         await interaction.response.send_message(f'Pong! Current ping is {bot_latency}ms.')
+    
+    @app_commands.command(name='help', description='Displays all existing commands.')
+    async def help(self, interaction: discord.Interaction):
+        categories = {}
+        for cog in self.client.cogs.values():
+            cog_name = cog.__class__.__name__.lower()
+            category = COG_CATEGORIES.get(cog_name, cog.__class__.__name__)
+            commands = getattr(cog, '__cog_app_commands__', [])
+            for command in bot_commands(commands):
+                full_name, description = command
+                categories.setdefault(category, []).append(f'* `{full_name}`: {description}')
+
+        embed = discord.Embed(
+            title = 'Available Commands',
+            color= discord.Color.purple()
+        )
+        for category, commands in categories.items():
+            embed.add_field(
+                name=category,
+                value='\n'.join(commands) if commands else 'No commands available in this category.',
+                inline=False
+            )
+        await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='canvas', description='See a canvas.')
     @app_commands.describe(

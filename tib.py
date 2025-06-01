@@ -28,8 +28,8 @@ async def load():
                 await bot.load_extension(f'cogs.{filename[:-3]}')
             except Exception as e:
                 print(f'Failed to load {filename[:-3]}: {e}')
-
-@tree.command(name='shutdown', description='Shut down the bot.')
+# all commands in this file are just for making sure the bot Actually Works
+@tree.command(name='shutdown', description='Shut down the bot (ADMIN ONLY)')
 async def shutdown(interaction: discord.Interaction):
     if interaction.user.id == owner_id:
         await interaction.response.send_message("Shutting down...")
@@ -37,7 +37,7 @@ async def shutdown(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
-@tree.command(name='sync', description='Sync.')
+@tree.command(name='sync', description='Sync (ADMIN ONLY)')
 async def sync(interaction: discord.Interaction):
     if interaction.user.id == owner_id:
         fmt = await tree.sync()
@@ -46,7 +46,7 @@ async def sync(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
-@tree.command(name='reload-cogs', description='Reload the cogs.')
+@tree.command(name='reload-cogs', description='Reload the cogs (ADMIN ONLY)')
 async def reload_cogs(interaction: discord.Interaction):
     if interaction.user.id == owner_id:
         reload = []

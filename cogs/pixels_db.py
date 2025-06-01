@@ -153,7 +153,7 @@ class db(commands.Cog):
     async def on_ready(self):
         print('Main DB cog loaded.')
     
-    @app_commands.command(name='add-pixels', description='Add pixels to a user.')
+    @app_commands.command(name='add-pixels', description='Add pixels to a user (ADMIN ONLY)')
     @app_commands.describe(user='The user to add pixels to.', canvas='Canvas number (no c).', pixels='Amount placed.')
     async def pixels_db_add(self, interaction: discord.Interaction, user: str, canvas: str, pixels: int):
         query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)" # the three question marks represents the above "user", "canvas", and "pixels"
