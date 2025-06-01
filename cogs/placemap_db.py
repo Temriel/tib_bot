@@ -114,15 +114,19 @@ class placemap(commands.Cog):
             
                 place = 0
                 undo = 0
+                mod = 0
                 with open(user_log_file, 'r') as log_file:
                     for line in log_file:
                         if 'user place' in line:
                             place += 1
                         elif 'user undo' in line:
                             undo += 1
+                        elif 'mod overwrite' in line:
+                            mod += 1
                 total_pixels = place - undo
                 print(f'{total_pixels} pixels placed')
                 print(f'{undo} pixels undone')
+                print(f'{mod} mod overwrites')
 
                 render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, 'normal']
                 # render_result = subprocess.run(render_cli, capture_output=True, text=True) # use for error handling
@@ -143,9 +147,12 @@ class placemap(commands.Cog):
                     end_time = time.time()
                     elapsed_time = end_time - start_time
                     file = discord.File(path, filename=filename)
+                    description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}'
+                    if mod > 0:
+                        description += f'\n**Mod Overwrites:** {mod}'
                     embed = discord.Embed(
                         title=f'Your Placemap for Canvas {canvas}', 
-                        description=f"**Pixels placed:** {total_pixels}\n**Undos:** {undo}", 
+                        description=description,
                         color=discord.Color.purple()
                         )
                     embed.set_author(
