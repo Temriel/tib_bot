@@ -106,8 +106,10 @@ class placemap(commands.Cog):
                 )
                 print(f'Filtering {user_key} for {user} on canvas {canvas}.')
                 stdout, stderr = await filter_result.communicate()
-                print(f'Subprocess output: {stdout}')
-                print(f'Subprocess error: {stderr}')
+                stdout_str = stdout.decode('utf-8').strip()
+                stderr_str = stderr.decode('utf-8').strip()
+                print(f'Subprocess output: {stdout_str}')
+                print(f'Subprocess error: {stderr_str}')
                 if filter_result.returncode != 0:
                     await interaction.followup.send(f'Something went wrong when generating the log file! Ping Temriel.')
                     return
@@ -135,8 +137,10 @@ class placemap(commands.Cog):
                 )
                 print(f'Generating placemap for {user} on canvas {canvas}')
                 stdout, stderr = await render_result.communicate()
-                print(f'Subprocess output: {stdout}')
-                print(f'Subprocess error: {stderr}')
+                stdout_str = stdout.decode('utf-8').strip()
+                stderr_str = stderr.decode('utf-8').strip()
+                print(f'Subprocess output: {stdout_str}')
+                print(f'Subprocess error: {stderr_str}')
                 # print(f'Final command list: {render_cli}') # use for error handling
                 filename = f'c{canvas}_normal_{user.id}.png'
                 path = output_path
