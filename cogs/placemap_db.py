@@ -7,6 +7,8 @@ import config
 import re
 import time
 import asyncio
+from typing import Union, Optional
+import csv
 # from collections import defaultdict
 # from PIL import image 
 
@@ -15,6 +17,124 @@ cursor = database.cursor()
 database.execute('CREATE TABLE IF NOT EXISTS logkey(user INT, canvas STR, key STR, PRIMARY KEY (user, canvas))')
 
 semaphore = asyncio.Semaphore(3)
+
+async def render(user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str) -> tuple[asyncio.subprocess.Process, str, str]:
+    bg, palette_path, output_path = config.paths(canvas, user.id, mode)
+    ple_dir = config.pxlslog_explorer_dir
+    render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, mode]
+    # render_result = subprocess.run(render_cli, capture_output=True, text=True) # use for error handling
+    render_result = await asyncio.create_subprocess_exec(
+        *render_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    print(f'Generating {mode} placemap for {user} on canvas {canvas}')
+    stdout, stderr = await render_result.communicate()
+    stdout_str = stdout.decode('utf-8').strip()
+    stderr_str = stderr.decode('utf-8').strip()
+    print(f'Subprocess output: {stdout_str}')
+    print(f'Subprocess error: {stderr_str}')
+    # print(f'Final command list: {render_cli}') # use for error handling
+    filename = f'c{canvas}_{mode}_{user.id}.png'
+    return render_result, filename, output_path
+
+async def most_active(user_log_file: str) -> tuple[tuple[int, int], int]:
+    pixel_counts = {}
+    with open (user_log_file, newline='') as csvfile:
+        reader = csv.reader(csvfile, delimiter='\t')
+        for row in reader:
+            if len(row) >=6:
+                x = row[2].strip()
+                y = row[3].strip()
+                key = (x, y)
+                pixel_counts[key] = pixel_counts.get(key, 0) + 1
+    if pixel_counts:
+        most_active, count = max(pixel_counts.items(), key=lambda item: item[1])
+        return most_active, count
+    else: 
+        return (0, 0), 0
+
+class PlacemapAltView(discord.ui.View):
+    def __init__(self, user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str, timeout: float = 300):
+        super().__init__(timeout=timeout)
+        self.user = user
+        self.canvas = canvas
+        self.mode = mode
+        self.user_log_file = user_log_file
+        self.pressed = False
+    
+    def disable_button(self, custom_id: str):
+        new_view = PlacemapAltView(
+            user=self.user, 
+            canvas=self.canvas, 
+            mode=self.mode, 
+            user_log_file=self.user_log_file, 
+            timeout=self.timeout or 300.0
+        )
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                new_button = discord.ui.Button(
+                    label=item.label, 
+                    style=item.style, 
+                    custom_id=item.custom_id,
+                    disabled=(item.custom_id == custom_id)
+                )
+        return new_view
+
+    @discord.ui.button(label='Activity', style=discord.ButtonStyle.primary, custom_id='activity')
+    async def activity_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        button.disabled = True
+        await interaction.response.defer()
+        await interaction.edit_original_response(view=self)
+        embed, file = await self.generate_alt(interaction, mode='activity')
+        if file:
+            await interaction.followup.send(embed=embed, file=file)
+        else:
+            await interaction.followup.send(embed=embed)
+
+    @discord.ui.button(label='Age', style=discord.ButtonStyle.primary, custom_id='age')
+    async def age_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        button.disabled = True
+        await interaction.response.defer()
+        await interaction.edit_original_response(view=self)
+        embed, file = await self.generate_alt(interaction, mode='age')
+        if file:
+            await interaction.followup.send(embed=embed, file=file)
+        else:
+            await interaction.followup.send(embed=embed)
+
+    async def generate_alt(self, interaction: discord.Interaction, mode: str) -> tuple[discord.Embed, Optional[discord.File]]:
+        start_time = time.time()
+        render_result, filename, output_path = await render(self.user, self.canvas, mode, self.user_log_file)
+        if mode == 'activity':
+            (active_x, active_y), active_count = await most_active(self.user_log_file)
+            description = f'**Most Active:** ({active_x}, {active_y}) with {active_count} pixels'
+            embed = discord.Embed(
+            title=f'Canvas {self.canvas} ({mode})',
+            description=description,
+            color=discord.Color.purple()
+            )
+        else:
+            embed = discord.Embed(
+                title=f'Canvas {self.canvas} ({mode})',
+                color=discord.Color.purple()
+            )
+        if render_result.returncode == 0:
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            file = discord.File(output_path, filename=filename)
+            embed.set_author(
+                name=self.user.global_name or self.user.name, 
+                icon_url=self.user.avatar.url if self.user.avatar else self.user.default_avatar.url
+                )
+            embed.set_image(url=f'attachment://{filename}')
+            embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
+            return embed, file
+        else:
+            embed = discord.Embed(
+            title='Error',
+            description='An error occured! Ping Temriel.',
+            color=discord.Color.red()
+            )
+            return embed, None
 
 class placemap(commands.Cog):
     def __init__(self, client):
@@ -82,10 +202,10 @@ class placemap(commands.Cog):
             start_time = time.time()
             get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
             user = interaction.user
-            bg, palette_path, output_path = config.paths(canvas, user.id)
             ple_dir = config.pxlslog_explorer_dir
             cursor.execute(get_key, (canvas, user.id)) # does the above
             user_key = cursor.fetchone()
+            mode = 'normal'
 
             if not user_key:
                 await interaction.followup.send(f'No log key found for this canvas.')
@@ -130,28 +250,15 @@ class placemap(commands.Cog):
                 print(f'{undo} pixels undone')
                 print(f'{mod} mod overwrites')
 
-                render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, 'normal']
-                # render_result = subprocess.run(render_cli, capture_output=True, text=True) # use for error handling
-                render_result = await asyncio.create_subprocess_exec(
-                    *render_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                )
-                print(f'Generating placemap for {user} on canvas {canvas}')
-                stdout, stderr = await render_result.communicate()
-                stdout_str = stdout.decode('utf-8').strip()
-                stderr_str = stderr.decode('utf-8').strip()
-                print(f'Subprocess output: {stdout_str}')
-                print(f'Subprocess error: {stderr_str}')
-                # print(f'Final command list: {render_cli}') # use for error handling
-                filename = f'c{canvas}_normal_{user.id}.png'
-                path = output_path
-
+                render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
                 # function that checks if pixel matches tpe
 
                 if render_result.returncode == 0:
                     end_time = time.time()
                     elapsed_time = end_time - start_time
-                    file = discord.File(path, filename=filename)
-                    description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}'
+                    file = discord.File(output_path, filename=filename)
+                    (active_x, active_y), active_count = await most_active(user_log_file)
+                    description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels'
                     if mod > 0:
                         description += f'\n**Mod Overwrites:** {mod}'
                     embed = discord.Embed(
@@ -165,7 +272,8 @@ class placemap(commands.Cog):
                         )
                     embed.set_image(url=f'attachment://{filename}')
                     embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
-                    await interaction.followup.send(embed=embed, file=file)
+                    view = PlacemapAltView(user, canvas, mode, user_log_file)
+                    await interaction.followup.send(embed=embed, file=file, view=view)
                 else:
                     await interaction.followup.send(f'An error occurred! Ping Temriel.')
             except Exception as e:

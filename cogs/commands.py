@@ -89,7 +89,7 @@ class commander(commands.Cog):
             filename = f'canvas-{canvas}_{displayed}.png'
             path = f'{config.pxlslog_explorer_dir}/pxls-final-canvas/canvas-{canvas}-{displayed}.png'
             file = discord.File(path, filename=filename)
-            embed = discord.Embed(title=f'Canvas {canvas}, {displayed}', )
+            embed = discord.Embed(title=f'Canvas {canvas}, {displayed}')
             embed.set_image(url=f'attachment://{filename}')
             await interaction.followup.send(embed=embed, file=file)
             print(f'Sending canvas {canvas}, {displayed}')

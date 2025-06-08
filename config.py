@@ -42,12 +42,12 @@ def get_palette(canvas: str):
         case _:
             return default_palette # change default palette lole
 
-def paths(canvas: str, user: int):
+def paths(canvas: str, user: int, mode: str):
     palette = get_palette(canvas)
     bg = f"{pxlslog_explorer_dir}/pxls-canvas/canvas-{canvas}-initial-empty.png"
     palette_path = f"{pxlslog_explorer_dir}/pxls-palette/palette_{palette}.gpl"
     output_dir = f"{pxlslog_explorer_dir}/pxls-out-tib"
-    output_path = f"{output_dir}/c{canvas}_normal_{user}.png"
+    output_path = f"{output_dir}/c{canvas}_{mode}_{user}.png"
     return bg, palette_path, output_path
 
 def tpe(canvas: str):
