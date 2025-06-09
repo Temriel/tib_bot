@@ -207,11 +207,11 @@ class placemap(commands.Cog):
             user_key = cursor.fetchone()
             mode = 'normal'
 
-            if not user_key:
-                await interaction.followup.send(f'No log key found for this canvas.')
-                return
             if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
                 await interaction.followup.send('Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.', ephemeral=True)
+                return
+            if not user_key:
+                await interaction.followup.send(f'No log key found for this canvas.')
                 return
             user_key = user_key[0]
             if not re.fullmatch(r'[a-z0-9]{512}', user_key):
