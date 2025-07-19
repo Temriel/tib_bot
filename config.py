@@ -1,9 +1,13 @@
 default_palette = 13 # REMINDER to change this
 pxlslog_explorer_dir = f"D:/pxlslog-explorer/target/release"
 
+# update these according to your needs :3
 def owner():
     owner_id = 313264660826685440
     return owner_id
+def update_channel():
+    update_channel_id = int(1270758227289571400)
+    return update_channel_id
 
 def get_palette(canvas: str):
     match canvas:

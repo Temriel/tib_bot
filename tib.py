@@ -12,6 +12,7 @@ load_dotenv()
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 
 intents = discord.Intents.none()
+intents.guilds = True
 bot = commands.Bot(command_prefix='>', intents=intents)
 tree = bot.tree
 
