@@ -10,7 +10,8 @@ import asyncio
 from typing import Union, Optional
 import csv
 # from collections import defaultdict
-# from PIL import image 
+from PIL import Image 
+import glob
 
 database = sqlite3.connect('database.db')
 cursor = database.cursor()
@@ -51,6 +52,79 @@ async def most_active(user_log_file: str) -> tuple[tuple[int, int], int]:
         return most_active, count
     else: 
         return (0, 0), 0
+    
+async def gpl_palette(palette_path: str) -> list[tuple[int, int, int]]:
+    palette = []
+    with open(palette_path, 'r') as f:
+        for line in f:
+            if line.startswith(('GIMP', 'Name', 'Columns', '#')):
+                continue
+            parts = line.split()
+            if len(parts) >= 3:
+                try:
+                    r = int(parts[0])
+                    g = int(parts[1])
+                    b = int(parts[2])
+                    palette.append((r, g, b))
+                except ValueError:
+                    continue
+    return palette
+
+async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> int:
+    palette_rgb = await gpl_palette(palette_path)
+    template_path = glob.glob(temp_pattern)
+    try:
+        template_images = [Image.open(path).convert('RGBA') for path in template_path]
+        initial_canvas_image = Image.open(initial_canvas_path).convert('RGB')
+    except FileNotFoundError as e:
+        print(f'{e}')
+        return 0
+    tpe_dict = {}
+    with open (user_log_file, newline='') as csvfile:
+        reader = csv.reader(csvfile, delimiter='\t')
+        for row in reader:
+            try:
+                if len(row) < 6:
+                    continue
+                x = int(row[2].strip())
+                y = int(row[3].strip())
+                index = int(row[4].strip())
+                action = row[5].strip()
+                coord = (x, y)
+
+                if action == 'user place':
+                    placed_rgb = palette_rgb[index]
+                    is_correct = False
+                    is_virgin = False
+                    present = False
+                    for tpe_image in template_images:
+                        value = tpe_image.getpixel(coord)
+                        if isinstance(value, tuple) and len(value) == 4:
+                            r, g, b, a = value
+                        else:
+                            continue
+                        if a == 0:
+                            continue
+                        present = True
+                        target_rgb = (r, g, b)
+                        initial_canvas_rgb = initial_canvas_image.getpixel(coord)
+                        if placed_rgb == target_rgb:
+                            is_correct = True
+                            break
+                        if target_rgb == initial_canvas_rgb:
+                            is_virgin = True
+                    if is_correct:
+                        tpe_dict[coord] = 1
+                    elif is_virgin:
+                        tpe_dict[coord] = 1
+                    elif present and not is_correct:
+                        tpe_dict[coord] = -1
+                elif action == 'user undo' and coord in tpe_dict:
+                    tpe_dict[coord] = 0
+            except (ValueError, IndexError, OSError):
+                continue
+    tpe_pixels = sum(tpe_dict.values())
+    return tpe_pixels
 
 class PlacemapAltView(discord.ui.View):
     def __init__(self, user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str, timeout: float = 300):
@@ -206,6 +280,8 @@ class placemap(commands.Cog):
             cursor.execute(get_key, (canvas, user.id)) # does the above
             user_key = cursor.fetchone()
             mode = 'normal'
+            update_channel_id = config.update_channel()
+            update_channel = interaction.client.get_channel(update_channel_id)
 
             if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
                 await interaction.followup.send('Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.', ephemeral=True)
@@ -237,6 +313,7 @@ class placemap(commands.Cog):
                 place = 0
                 undo = 0
                 mod = 0
+                tpe_pixels = 0
                 with open(user_log_file, 'r') as log_file:
                     for line in log_file:
                         if 'user place' in line:
@@ -246,19 +323,29 @@ class placemap(commands.Cog):
                         elif 'mod overwrite' in line:
                             mod += 1
                 total_pixels = place - undo
+                if config.tpe(canvas):
+                    _, palette_path, _ = config.paths(canvas, user.id, mode)
+                    temp_pattern = f'template/c{canvas}_*.png'
+                    tpe_pixels = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path=f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png")
                 print(f'{total_pixels} pixels placed')
                 print(f'{undo} pixels undone')
+                if config.tpe(canvas):
+                    print(f'{tpe_pixels} pixels placed for TPE')
                 print(f'{mod} mod overwrites')
 
                 render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
                 # function that checks if pixel matches tpe
 
                 if render_result.returncode == 0:
+                    if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
+                        await update_channel.send(f'**{user}** ({user.id}) on c{canvas}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**Mod overwrites:** {mod}')
                     end_time = time.time()
                     elapsed_time = end_time - start_time
                     file = discord.File(output_path, filename=filename)
                     (active_x, active_y), active_count = await most_active(user_log_file)
                     description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels'
+                    if config.tpe(canvas):
+                        description += f'\n**Pixels for TPE:** {tpe_pixels}'
                     if mod > 0:
                         description += f'\n**Mod Overwrites:** {mod}'
                     embed = discord.Embed(
