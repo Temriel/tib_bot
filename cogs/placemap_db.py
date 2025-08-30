@@ -325,7 +325,7 @@ class placemap(commands.Cog):
                 total_pixels = place - undo
                 if config.tpe(canvas):
                     _, palette_path, _ = config.paths(canvas, user.id, mode)
-                    temp_pattern = f'template/c{canvas}_*.png'
+                    temp_pattern = f'template/c{canvas}/*.png'
                     tpe_pixels = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path=f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png")
                 print(f'{total_pixels} pixels placed')
                 print(f'{undo} pixels undone')
