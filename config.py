@@ -1,13 +1,19 @@
+from dotenv import load_dotenv
+import os
+load_dotenv()
 default_palette = 13 # REMINDER to change this
-pxlslog_explorer_dir = f"D:/pxlslog-explorer/target/release"
+pxlslog_explorer_dir = os.getenv("pxlslog_explorer_dir")
 
-# update these according to your needs :3
 def owner():
-    owner_id = 313264660826685440
-    return owner_id
+    owner_id = os.getenv("owner_id")
+    if owner_id is None:
+        raise ValueError("owner_id not set!")
+    return int(owner_id)
 def update_channel():
-    update_channel_id = int(1270758227289571400)
-    return update_channel_id
+    update_channel_id = os.getenv("update_channel_id")
+    if update_channel_id is None:
+        raise ValueError("update_channel_id not set!")
+    return int(update_channel_id)
 
 def get_palette(canvas: str):
     match canvas:
@@ -35,7 +41,7 @@ def get_palette(canvas: str):
             return 11
         case "61"|"62"|"63"|"64"|"64a"|"65"|"65a"|"66"|"67"|"67a"|"68"|"69"|"70"|"71"|"72"|"73"|"74"|"75":
             return 12
-        case "76"|"77"|"78"|"78a"|"79"|"80"|"81"|"82"|"83"|"84"|"85"|"86"|"87"|"88":
+        case "76"|"77"|"78"|"78a"|"79"|"80"|"81"|"82"|"83"|"84"|"85"|"86"|"87"|"88"|"89"|"90"|"91"|"92"|"93"|"94":
             return 13
         case "21a":
             return "gimmick_1"
@@ -57,7 +63,7 @@ def paths(canvas: str, user: int, mode: str):
 def tpe(canvas: str):
     tpe_canvas = [
         "51", "52", "53", "54", "55", # before che
-        "57", "58", "59", "60", "61", "63", "66", "68", "77", "78a", # during che
+        "57", "58", "59", "60", "61", "63", "66", "67", "68", "77", "78a", # during che
         "81", "82", "83", "84", "85", "86", "87", "88", "88a", "89", "90", "91", "92", "93", "94", "95", "96", "97", "98", "99", "100"  # after che, expand with new canvases
         ]
     tpe_present = canvas.strip() in tpe_canvas

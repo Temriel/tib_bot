@@ -338,7 +338,16 @@ class placemap(commands.Cog):
 
                 if render_result.returncode == 0:
                     if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
-                        await update_channel.send(f'**{user}** ({user.id}) on c{canvas}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**Mod overwrites:** {mod}')
+                        embed = discord.Embed(
+                        title=f'{user} on c{canvas}', 
+                        description=f'**User ID:** {user.id}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**Mod overwrites:** {mod}',
+                        color=discord.Color.purple()
+                        )
+                        embed.set_author(
+                            name=user.global_name or user.name, 
+                            icon_url=user.avatar.url if user.avatar else user.default_avatar.url
+                            )
+                        await update_channel.send(embed=embed)
                     end_time = time.time()
                     elapsed_time = end_time - start_time
                     file = discord.File(output_path, filename=filename)
