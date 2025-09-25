@@ -5,17 +5,20 @@ default_palette = 13 # REMINDER to change this
 pxlslog_explorer_dir = os.getenv("pxlslog_explorer_dir")
 
 def owner():
+    """Defining an owner within Tib."""
     owner_id = os.getenv("owner_id")
     if owner_id is None:
         raise ValueError("owner_id not set!")
     return int(owner_id)
 def update_channel():
+    """Channel for Tib status updates (rankups, placemap stats, etc.)"""
     update_channel_id = os.getenv("update_channel_id")
     if update_channel_id is None:
         raise ValueError("update_channel_id not set!")
     return int(update_channel_id)
 
 def get_palette(canvas: str):
+    """A simple function to find the palette of a canvas. If it isn't found, apply a default palette."""
     match canvas:
         case "1"|"2":
             return 1
@@ -49,10 +52,13 @@ def get_palette(canvas: str):
             return "gimmick_2"
         case "56a":
             return "gimmick_3"
+        case "93a":
+            return "gimmick_4"
         case _:
             return default_palette # change default palette lole
 
 def paths(canvas: str, user: int, mode: str):
+    """A number of paths designed for Tib's specific use case."""
     palette = get_palette(canvas)
     bg = f"{pxlslog_explorer_dir}/pxls-canvas/canvas-{canvas}-initial-empty.png"
     palette_path = f"{pxlslog_explorer_dir}/pxls-palette/palette_{palette}.gpl"
@@ -61,6 +67,7 @@ def paths(canvas: str, user: int, mode: str):
     return bg, palette_path, output_path
 
 def tpe(canvas: str):
+    """All canvases TPE has been present on, for passing against images in /templates"""
     tpe_canvas = [
         "51", "52", "53", "54", "55", # before che
         "57", "58", "59", "60", "61", "63", "66", "67", "68", "77", "78a", # during che
@@ -70,6 +77,7 @@ def tpe(canvas: str):
     return tpe_present
 
 def ranks():
+    """A list of tuples for pixels required & associated rank."""
     return [
         (150000, "Admiral"),
         (100000, "General"),

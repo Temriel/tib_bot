@@ -17,6 +17,7 @@ owner_id = config.owner()
 update_channel_id = config.update_channel()
 
 def create_pages(items: list, page: int, page_size: int = 30):
+    """Function to determine the amount of pages & what goes where."""
     total_pages = (len(items) + page_size - 1) // page_size
     page = max(1, min(page, total_pages))
     start = (page - 1) * page_size
@@ -35,6 +36,7 @@ class LeaderboardView(discord.ui.View):
         self.spacing = 18
     
     def generate_embed(self):
+        """Generate an embed for /list, applies to pages too."""
         # getting page function, font, and headers
         page_pixels, _ = create_pages(self.all_pixels, self.current_page, self.page_size)
         font = ImageFont.truetype(self.font_path, self.font_size)
@@ -158,7 +160,8 @@ class db(commands.Cog):
     @app_commands.command(name='add-pixels', description='Add pixels to a user (ADMIN ONLY)')
     @app_commands.describe(user='The user to add pixels to.', canvas='Canvas number (no c).', pixels='Amount placed.')
     async def pixels_db_add(self, interaction: discord.Interaction, user: str, canvas: str, pixels: int):
-        query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)" # the three question marks represents the above "user", "canvas", and "pixels"
+        """Add pixels to a user in the database. Needed values are user, canvas & pixels."""
+        query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)"
         try:
             if interaction.user.id == owner_id:
                 if not isinstance(canvas, str):
@@ -204,6 +207,7 @@ class db(commands.Cog):
     @app_commands.command(name='lookup', description='See how many pixels a certain user has placed for us.')
     @app_commands.describe(profile='Who do you want to look up?')
     async def pixels_db_lookup(self, interaction: discord.Interaction, profile: str):
+        """Find the total pixel count for a user & their rank (defined in config.py)"""
         if not re.fullmatch(r'^[a-zA-Z0-9_-]{1,32}$', profile):
             await interaction.response.send_message('Invalid username', ephemeral=True)
             return

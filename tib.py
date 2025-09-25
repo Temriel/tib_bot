@@ -32,6 +32,7 @@ async def load():
 # all commands in this file are just for making sure the bot Actually Works
 @tree.command(name='shutdown', description='Shut down the bot (ADMIN ONLY)')
 async def shutdown(interaction: discord.Interaction):
+    """Goodnight, sweet prince."""
     if interaction.user.id == owner_id:
         await interaction.response.send_message("Shutting down...")
         await bot.close()
@@ -40,6 +41,7 @@ async def shutdown(interaction: discord.Interaction):
 
 @tree.command(name='sync', description='Sync (ADMIN ONLY)')
 async def sync(interaction: discord.Interaction):
+    """Sync commands to Discord (DO NOT SPAM)"""
     if interaction.user.id == owner_id:
         fmt = await tree.sync()
         await interaction.response.send_message('Synced commands.', ephemeral=True)
@@ -49,6 +51,7 @@ async def sync(interaction: discord.Interaction):
 
 @tree.command(name='reload-cogs', description='Reload the cogs (ADMIN ONLY)')
 async def reload_cogs(interaction: discord.Interaction):
+    """Reload all cogs present within the bot. They can't be used otherwise (esp if you add new code)"""
     if interaction.user.id == owner_id:
         reload = []
         importlib.reload(config)

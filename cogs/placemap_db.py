@@ -20,6 +20,7 @@ database.execute('CREATE TABLE IF NOT EXISTS logkey(user INT, canvas STR, key ST
 semaphore = asyncio.Semaphore(3)
 
 async def render(user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str) -> tuple[asyncio.subprocess.Process, str, str]:
+    """Render a placemap from a log file. Uses pxlslog-explorer render.exe."""
     bg, palette_path, output_path = config.paths(canvas, user.id, mode)
     ple_dir = config.pxlslog_explorer_dir
     render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path, '--screenshot', '--output', output_path, mode]
@@ -38,6 +39,7 @@ async def render(user: Union[discord.User, discord.Member], canvas: str, mode: s
     return render_result, filename, output_path
 
 async def most_active(user_log_file: str) -> tuple[tuple[int, int], int]:
+    """Find the most active pixel using a user log file."""
     pixel_counts = {}
     with open (user_log_file, newline='') as csvfile:
         reader = csv.reader(csvfile, delimiter='\t')
@@ -54,6 +56,7 @@ async def most_active(user_log_file: str) -> tuple[tuple[int, int], int]:
         return (0, 0), 0
     
 async def gpl_palette(palette_path: str) -> list[tuple[int, int, int]]:
+    """Find palette RGB from a .gpl file."""
     palette = []
     with open(palette_path, 'r') as f:
         for line in f:
@@ -71,6 +74,7 @@ async def gpl_palette(palette_path: str) -> list[tuple[int, int, int]]:
     return palette
 
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> int:
+    """Find the amount of pixels placed for TPE on a specified canvas using template images. Handles virgin pixels."""
     palette_rgb = await gpl_palette(palette_path)
     template_path = glob.glob(temp_pattern)
     try:
@@ -176,6 +180,7 @@ class PlacemapAltView(discord.ui.View):
             await interaction.followup.send(embed=embed)
 
     async def generate_alt(self, interaction: discord.Interaction, mode: str) -> tuple[discord.Embed, Optional[discord.File]]:
+        """Function to generate "age" and "activity" placemaps."""
         start_time = time.time()
         render_result, filename, output_path = await render(self.user, self.canvas, mode, self.user_log_file)
         if mode == 'activity':
@@ -222,6 +227,7 @@ class placemap(commands.Cog):
 
     @group.command(name='add', description='Add a log key.') # adds a log key to the database using a fancy ass modal
     async def placemap_db_add(self, interaction: discord.Interaction):
+        """Add a logkey to Tib's internal database."""
         embed = discord.Embed(
             title='Add your log key', 
             description='''
@@ -271,6 +277,7 @@ class placemap(commands.Cog):
 
     @group.command(name='generate', description='Generate a placemap from a log key.')
     async def placemap_db_generate(self, interaction: discord.Interaction, canvas: str):
+        """Generate a placemap by piping the necessary arguments to pxlslog-explorer."""
         await interaction.response.defer(ephemeral=False,thinking=True)
         async with semaphore:
             start_time = time.time()

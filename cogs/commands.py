@@ -12,6 +12,7 @@ COG_CATEGORIES = {
 }
 
 def bot_commands(commands, parent_name=''):
+    """Find all bot commands for /help"""
     command_list = []
     for command in commands:
         full_name = f'{parent_name} {command.name}'.strip()
@@ -41,6 +42,7 @@ class commander(commands.Cog):
     
     @app_commands.command(name='help', description='Displays all existing commands.')
     async def help(self, interaction: discord.Interaction):
+        """Help command that dynamically finds all slash commands within the bot."""
         categories = {}
         for cog in self.client.cogs.values():
             cog_name = cog.__class__.__name__.lower()
@@ -80,6 +82,7 @@ class commander(commands.Cog):
         ]
     )
     async def canvas(self, interaction: discord.Interaction, canvas: str, display: Optional[app_commands.Choice[str]] = None):
+        """View a canvas generated via the pxlslog-explorer."""
         displayed = display.value if display else 'final'
         await interaction.response.defer(ephemeral=False, thinking=True)
         try:
