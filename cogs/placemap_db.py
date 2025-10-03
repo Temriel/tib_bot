@@ -13,6 +13,8 @@ import csv
 from PIL import Image 
 import glob
 
+owner_id = config.owner()
+
 database = sqlite3.connect('database.db')
 cursor = database.cursor()
 database.execute('CREATE TABLE IF NOT EXISTS logkey(user INT, canvas STR, key STR, PRIMARY KEY (user, canvas))')
@@ -73,7 +75,7 @@ async def gpl_palette(palette_path: str) -> list[tuple[int, int, int]]:
                     continue
     return palette
 
-async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> int:
+async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple [int, int]:
     """Find the amount of pixels placed for TPE on a specified canvas using template images. Handles virgin pixels."""
     palette_rgb = await gpl_palette(palette_path)
     template_path = glob.glob(temp_pattern)
@@ -82,8 +84,9 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
         initial_canvas_image = Image.open(initial_canvas_path).convert('RGB')
     except FileNotFoundError as e:
         print(f'{e}')
-        return 0
-    tpe_dict = {}
+        return 0, 0
+    tpe_place = {}
+    tpe_grief = {}
     with open (user_log_file, newline='') as csvfile:
         reader = csv.reader(csvfile, delimiter='\t')
         for row in reader:
@@ -117,18 +120,20 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
                             break
                         if target_rgb == initial_canvas_rgb:
                             is_virgin = True
-                    if is_correct:
-                        tpe_dict[coord] = 1
-                    elif is_virgin:
-                        tpe_dict[coord] = 1
+                    if is_correct or is_virgin:
+                        tpe_place[coord] = tpe_place.get(coord, 0) + 1
+                        tpe_grief.pop(coord, None)
                     elif present and not is_correct:
-                        tpe_dict[coord] = -1
-                elif action == 'user undo' and coord in tpe_dict:
-                    tpe_dict[coord] = 0
+                        tpe_grief[coord] = tpe_grief.get(coord, 0) + 1
+                        tpe_place.pop(coord, None)
+                elif action == 'user undo':
+                    tpe_place.pop(coord, None)
+                    tpe_grief.pop(coord, None)
             except (ValueError, IndexError, OSError):
                 continue
-    tpe_pixels = sum(tpe_dict.values())
-    return tpe_pixels
+    tpe_pixels = sum(tpe_place.values())
+    tpe_griefs = sum(tpe_grief.values())
+    return tpe_pixels - tpe_griefs, tpe_griefs
 
 class PlacemapAltView(discord.ui.View):
     def __init__(self, user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str, timeout: float = 300):
@@ -214,6 +219,109 @@ class PlacemapAltView(discord.ui.View):
             color=discord.Color.red()
             )
             return embed, None
+        
+class placemapDBAdd(discord.ui.Modal, title='Add your log key.'):
+    canvas = discord.ui.TextInput(label='Canvas Number', placeholder='Add canvas number (eg, 28 or 56a).', max_length=4, min_length=1)
+    key = discord.ui.TextInput(label='Log key (512 char)', style=discord.TextStyle.paragraph, max_length=512, min_length=512)
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', self.canvas.value):
+            await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
+            return
+        if not re.fullmatch(r'[a-z0-9]{512}', self.key.value):
+            await interaction.response.send_message('Invalid format! A log key can only contain a-z and 0-9.', ephemeral=True)
+            return
+        
+        user = interaction.user
+        query = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)" # the three question marks represents the above "user", "canvas", and "logkey"
+        try:
+            cursor.execute(query, (user.id, self.canvas.value, self.key.value)) # we use user.id to store the ID instead of the user string - das bad
+            database.commit()
+            print(f'Log key added for {user} ({user.id}) on canvas {self.canvas.value}.')
+            await interaction.response.send_message(f'Added key for canvas {self.canvas.value}!', ephemeral=True)
+            return
+        except sqlite3.OperationalError as e:
+            await interaction.response.send_message('Error! Something went wrong, ping Temriel.', ephemeral=True)
+            print(f'An SQLite3 error occurred: {e}')
+            return
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, ping Temriel.', ephemeral=True)
+            print(f'An error occurred: {e}')
+            return
+
+class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
+    user_canvas = discord.ui.TextInput(label='userID, canvas', placeholder='uID,28,30a,59 OR 56a,uID1,uID2,uID3', style=discord.TextStyle.short, max_length=200)
+    key = discord.ui.TextInput(label='Log keys (512 char each)', placeholder='key1,key2,key3,key4,key5,key6', style=discord.TextStyle.paragraph, max_length=4000)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        query = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)"
+        try:
+            if interaction.user.id == owner_id:
+                user_canvases = [x.strip() for x in self.user_canvas.value.split(',')]
+                keys = [x.strip() for x in self.key.value.split(',')]
+                if len(user_canvases) < 2:
+                    await interaction.response.send_message('You must provide a user ID and at least one canvas.', ephemeral=True)
+                    return
+                
+                if len(user_canvases[0]) > 4: # one user, multiple canvases
+                    user_id = int(user_canvases[0])
+                    canvases = user_canvases[1:]
+                    if len(keys) != len(canvases):
+                        await interaction.response.send_message('The number of keys must match the number of canvases.', ephemeral=True)
+                        return
+                    success = []
+                    fail = []
+                    for canvas, key in zip(canvases, keys):
+                        if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+                            fail.append((f'c{canvas}, Invalid canvas format'))
+                            continue
+                        if not re.fullmatch(r'[a-z0-9]{512}', key):
+                            fail.append((f'c{canvas}, Invalid key format'))
+                            continue
+                        try:
+                            cursor.execute(query, (user_id, canvas, key))
+                            database.commit()
+                            success.append(f'c{canvas}')
+                        except sqlite3.OperationalError as e:
+                            fail.append((f'c{canvas}, SQLite error: {e}'))
+                        except Exception as e:
+                            fail.append((f'c{canvas}, Error: {e}'))
+                    message = f'<@{user_id}> ({user_id}) now has keys for canvases: {', '.join(success)}'
+                    if fail:
+                        message += f'\nFailed for canvases: {', '.join(fail)}'
+                    await interaction.response.send_message(message, ephemeral=True)
+                else:
+                    canvas = user_canvases[0]
+                    user_ids = user_canvases[1:]
+                    if len(keys) != len(user_ids):
+                        await interaction.response.send_message('The number of keys must match the number of canvases.', ephemeral=True)
+                        return
+                    success = []
+                    fail = []
+                    for user_id, key in zip(user_ids, keys):
+                        if not re.fullmatch(r'\d{17,}', user_id):
+                            fail.append((f'<@{user_id}> ({user_id}), Invalid user ID format'))
+                            continue
+                        if not re.fullmatch(r'[a-z0-9]{512}', key):
+                            fail.append((f'<@{user_id}> ({user_id}), Invalid key format'))
+                            continue
+                        try:
+                            cursor.execute(query, (int(user_id), canvas, key))
+                            database.commit()
+                            success.append(f'<@{user_id}> ({user_id})')
+                        except sqlite3.OperationalError as e:
+                            fail.append((f'{user_id}, SQLite error: {e}'))
+                        except Exception as e:
+                            fail.append((f'{user_id}, Error: {e}'))
+                    message = f'c{canvas} now has logkeys for: {', '.join(success)}'
+                    if fail:
+                        message += f'\nFailed for users: {', '.join(fail)}'
+                    await interaction.response.send_message(message, ephemeral=True)
+            else:
+                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
 
 class placemap(commands.Cog):
     def __init__(self, client):
@@ -224,6 +332,19 @@ class placemap(commands.Cog):
         print('Key DB cog loaded')
 
     group = app_commands.Group(name="logkey", description="Add your log key or make a placemap from it :3")
+
+    @group.command(name='force-add', description='Force add a logkey for a user (ADMIN ONLY).') 
+    async def placemap_db_add_admin(self, interaction: discord.Interaction):
+        """Add a logkey forcefully"""
+        try:
+            if interaction.user.id == owner_id:
+                modal = placemapDBAddAdmin()
+                await interaction.response.send_modal(modal)
+            else:
+                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
 
     @group.command(name='add', description='Add a log key.') # adds a log key to the database using a fancy ass modal
     async def placemap_db_add(self, interaction: discord.Interaction):
@@ -243,37 +364,8 @@ class placemap(commands.Cog):
         view.add_item(button)
         await interaction.response.send_message(embed=embed, view=view)
     async def open_modal(self, interaction: discord.Interaction):
-        modal = self.placemap_db_add_modal()
+        modal = placemapDBAdd()
         await interaction.response.send_modal(modal)
-
-    class placemap_db_add_modal(discord.ui.Modal, title='Add your log key.'):
-        canvas = discord.ui.TextInput(label='Canvas Number', placeholder='Add canvas number (eg, 28 or 56a).', max_length=4, min_length=1)
-        key = discord.ui.TextInput(label='Log key (512 char)', style=discord.TextStyle.paragraph, max_length=512, min_length=512)
-        
-        async def on_submit(self, interaction: discord.Interaction):
-            if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', self.canvas.value):
-                await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
-                return
-            if not re.fullmatch(r'[a-z0-9]{512}', self.key.value):
-                await interaction.response.send_message('Invalid format! A log key can only contain a-z and 0-9.', ephemeral=True)
-                return
-            
-            user = interaction.user
-            query = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)" # the three question marks represents the above "user", "canvas", and "logkey"
-            try:
-                cursor.execute(query, (user.id, self.canvas.value, self.key.value)) # we use user.id to store the ID instead of the user string - das bad
-                database.commit()
-                print(f'Log key added for {user} ({user.id}) on canvas {self.canvas.value}.')
-                await interaction.response.send_message(f'Added key for canvas {self.canvas.value}!', ephemeral=True)
-                return
-            except sqlite3.OperationalError as e:
-                await interaction.response.send_message('Error! Something went wrong, ping Temriel.', ephemeral=True)
-                print(f'An SQLite3 error occurred: {e}')
-                return
-            except Exception as e:
-                await interaction.response.send_message('Error! Something went wrong, ping Temriel.', ephemeral=True)
-                print(f'An error occurred: {e}')
-                return
 
     @group.command(name='generate', description='Generate a placemap from a log key.')
     async def placemap_db_generate(self, interaction: discord.Interaction, canvas: str):
@@ -321,6 +413,7 @@ class placemap(commands.Cog):
                 undo = 0
                 mod = 0
                 tpe_pixels = 0
+                tpe_griefs = 0
                 with open(user_log_file, 'r') as log_file:
                     for line in log_file:
                         if 'user place' in line:
@@ -333,11 +426,12 @@ class placemap(commands.Cog):
                 if config.tpe(canvas):
                     _, palette_path, _ = config.paths(canvas, user.id, mode)
                     temp_pattern = f'template/c{canvas}/*.png'
-                    tpe_pixels = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path=f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png")
+                    tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path=f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png")
                 print(f'{total_pixels} pixels placed')
                 print(f'{undo} pixels undone')
                 if config.tpe(canvas):
                     print(f'{tpe_pixels} pixels placed for TPE')
+                    print(f'{tpe_griefs} pixels griefed')
                 print(f'{mod} mod overwrites')
 
                 render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
@@ -347,7 +441,7 @@ class placemap(commands.Cog):
                     if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
                         embed = discord.Embed(
                         title=f'{user} on c{canvas}', 
-                        description=f'**User ID:** {user.id}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**Mod overwrites:** {mod}',
+                        description=f'**User ID:** {user.id}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE griefed:** {tpe_griefs}\n**Mod overwrites:** {mod}',
                         color=discord.Color.purple()
                         )
                         embed.set_author(
@@ -362,6 +456,7 @@ class placemap(commands.Cog):
                     description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels'
                     if config.tpe(canvas):
                         description += f'\n**Pixels for TPE:** {tpe_pixels}'
+                        description += f'\n**Pixels griefed:** {tpe_griefs}'
                     if mod > 0:
                         description += f'\n**Mod Overwrites:** {mod}'
                     embed = discord.Embed(

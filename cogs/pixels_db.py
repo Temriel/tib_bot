@@ -201,7 +201,7 @@ class db(commands.Cog):
             else:
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message('Error! Something went wrong, ping Temriel.', ephemeral=True)
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
 
     @app_commands.command(name='lookup', description='See how many pixels a certain user has placed for us.')
