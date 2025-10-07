@@ -135,6 +135,45 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     tpe_griefs = sum(tpe_grief.values())
     return tpe_pixels - tpe_griefs, tpe_griefs
 
+async def tpe_pixels_count_older(user_id: int, callback=None,) -> dict:
+    """Finds how many pixels a user has placed on all recorded TPE canvases using logkeys."""
+    query = "SELECT canvas, key FROM logkey WHERE user=?"
+    cursor.execute(query, (user_id,))
+    canvases = [str(row[0]) for row in cursor.fetchall() if config.tpe(str(row[0]))]
+    ple_dir = config.pxlslog_explorer_dir
+    results = {}
+    total = len(canvases)
+    for idx, canvas in enumerate(canvases):
+        if callback:
+            await callback(canvas, idx + 1, total)
+        else:
+            print(f'Processing c{canvas} ({idx + 1}/{total}) for user {user_id}')
+        user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user_id}_pixels_c{canvas}.log'
+        _, palette_path, _ = config.paths(canvas, user_id, 'normal')
+        temp_pattern = f'template/c{canvas}/*.png'
+        initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
+        place = 0
+        undo = 0
+        try:
+            with open(user_log_file, 'r') as log_key:
+                for line in log_key:
+                    if 'user place' in line:
+                        place += 1
+                    elif 'user undo' in line:
+                        undo += 1  
+            total_pixels = place - undo
+            tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path)
+            results[canvas] = {
+                'total_pixels': total_pixels,
+                'undo': undo,
+                'tpe_pixels': tpe_pixels,
+                'tpe_griefs': tpe_griefs,
+                }
+        except Exception as e:
+            print(f'An error occurred while processing canvas {canvas} for user {user_id}: {e}')
+            results[canvas] = (0, 0, 0, 0)
+    return results
+
 class PlacemapAltView(discord.ui.View):
     def __init__(self, user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str, timeout: float = 300):
         super().__init__(timeout=timeout)
@@ -345,6 +384,37 @@ class placemap(commands.Cog):
         except Exception as e:
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
+    
+    @group.command(name='force-check', description='Forcefully check how many pixels a user has placed on all recorded canvases (ADMIN ONLY).')
+    async def placemap_db_force_check(self, interaction: discord.Interaction, user: discord.User):
+        """Checks how many pixels a user has placed for TPE using logkeys - going past the limit of /logkey generate only checking after the feature was implemented."""
+        try:
+            if interaction.user.id == owner_id:
+                await interaction.response.defer(ephemeral=True,thinking=True)
+                progress = await interaction.followup.send(f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases...', ephemeral=True, wait=True)
+                async def callback(canvas, idx, total):
+                    """Update the message so you can see THINGS are HAPPENING."""
+                    await progress.edit(content=f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases... (c{canvas} {idx}/{total})')
+                    print(f'Processing c{canvas} ({idx}/{total}) for user {user.id}')
+                results = await tpe_pixels_count_older(user.id, callback=callback)
+                if not results:
+                    await progress.edit(content=f'No logs found for <@{user.id}>')
+                    return
+                lines = [f'--- <@{user.id}> ({user.id}) ---']
+                for canvas, stats in results.items():
+                    lines.append(
+                        f'**c{canvas}:** {stats.get('total_pixels', 0)} total, '
+                        f'{stats.get('tpe_pixels', 0)} placed, '
+                        f'{stats.get('tpe_griefs', 0)} griefed'
+                        )
+                    await progress.edit(content='\n'.join(lines))
+            else:
+                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+                return
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
+            return
 
     @group.command(name='add', description='Add a log key.') # adds a log key to the database using a fancy ass modal
     async def placemap_db_add(self, interaction: discord.Interaction):

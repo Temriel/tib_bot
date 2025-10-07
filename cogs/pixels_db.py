@@ -41,11 +41,20 @@ class LeaderboardView(discord.ui.View):
         page_pixels, _ = create_pages(self.all_pixels, self.current_page, self.page_size)
         font = ImageFont.truetype(self.font_path, self.font_size)
         spacing = self.spacing
+        top_adjustment = 2
+        bottom_adjustment = 3
+
+        bg_color = (24, 4, 53)
+        header_color = (75, 0, 130)
+        even_row_color = (34, 11, 76)
+        odd_row_color = (29, 8, 65)
+        border_color = (138, 43, 226)
+        text_color = (255, 255, 255)
+
         headers = ["Rank", "Username", "Pixels"]
         temp_image = Image.new("RGB", (1, 1))
         temp_draw = ImageDraw.Draw(temp_image)
 
-        # header pos
         ranks_value = [
             str(rank) for rank in range(1 + (self.current_page - 1) * self.page_size,
                                         1 + (self.current_page - 1) * self.page_size + len(page_pixels))
@@ -61,53 +70,50 @@ class LeaderboardView(discord.ui.View):
         ranks_start = spacing
         usernames_start = ranks_start + ranks_width + spacing
         pixels_start = usernames_start + usernames_width + spacing
-        
-        # image gen
-        headers_height = temp_draw.textbbox((0, 0), "Ag", font=font)[3]
-        rows_height = headers_height + 3
+
+        ascent, descent = font.getmetrics()
+        headers_height = ascent + descent + 10
+        rows_height = headers_height
         image_width = pixels_start + pixels_width + spacing
-        image_height = spacing + rows_height * (len(page_pixels) + 1) + spacing
-        image = Image.new("RGB", (image_width, image_height), color=(24, 4, 53))
+        image_height = headers_height + (rows_height * len(page_pixels)) + bottom_adjustment
+        image = Image.new("RGB", (image_width, image_height), color=bg_color)
         draw = ImageDraw.Draw(image)
+        # header colour
+        draw.rectangle([0, 0, image_width, spacing + top_adjustment + headers_height], fill=header_color)
 
-        y = spacing
-        text = headers[0]
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        pos_x = ranks_start + (ranks_width - text_width) / 2
-        draw.text((pos_x, y), text, fill="white", font=font)
+        # headers
+        for idx, text in enumerate(headers):
+            if idx == 0:
+                start = ranks_start
+                width = ranks_width
+            elif idx == 1:
+                start = usernames_start
+                width = usernames_width
+            else:
+                start = pixels_start
+                width = pixels_width
+            pos_x = start + (width / 2)
+            pos_y = top_adjustment + headers_height / 2 - 1
+            draw.text((pos_x, pos_y), text, fill=text_color, font=font, anchor="mm")
 
-        text = headers[1]
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        pos_x = usernames_start + (usernames_width - text_width) / 2
-        draw.text((pos_x, y), text, fill="white", font=font)
-
-        text = headers[2]
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        pos_x = pixels_start + (pixels_width - text_width) / 2
-        draw.text((pos_x, y), text, fill="white", font=font)
-
-        y += rows_height
+        # rows
+        y = headers_height
         for i, (user, total_all) in enumerate(page_pixels):
-            rank_text = str(i + 1 + (self.current_page - 1) * self.page_size)
-            bbox = draw.textbbox((0, 0), rank_text, font=font)
-            text_width = bbox[2] - bbox[0]
-            pos_x = ranks_start + (ranks_width - text_width) / 2
-            draw.text((pos_x, y), rank_text, fill="white", font=font)
+            row_color = even_row_color if i % 2 == 0 else odd_row_color
+            draw.rectangle([0, y, image_width, y + rows_height], fill=row_color)
 
-            bbox = draw.textbbox((0, 0), user, font=font)
-            text_width = bbox[2] - bbox[0]
-            pos_x = usernames_start + (usernames_width - text_width) / 2
-            draw.text((pos_x, y), user, fill="white", font=font)
-            
-            pixels_text = str(total_all)
-            bbox = draw.textbbox((0, 0), pixels_text, font=font)
-            text_width = bbox[2] - bbox[0]
-            pos_x = pixels_start + (pixels_width - text_width) / 2
-            draw.text((pos_x, y), pixels_text, fill="white", font=font)
+            for idx, (text, start, width) in enumerate([
+                (str(i + 1 + (self.current_page - 1) * self.page_size), ranks_start, ranks_width),
+                (user, usernames_start, usernames_width),
+                (str(total_all), pixels_start, pixels_width)
+            ]):
+                pos_x = start + (width / 2)
+                pos_y = y + (rows_height) / 2 - 1
+                draw.text((pos_x, pos_y), text, fill="white", font=font, anchor="mm")
             y += rows_height
+
+        # draw border (last)
+        draw.rectangle([0, 0, image_width - 1, image_height - 1], outline=border_color, width=2)
 
         with io.BytesIO() as image_binary: # below sends the embed w/ the image
             image.save(image_binary, 'PNG')
