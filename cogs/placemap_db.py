@@ -136,15 +136,21 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     return tpe_pixels - tpe_griefs, tpe_griefs
 
 async def tpe_pixels_count_older(user_id: int, callback=None,) -> dict:
-    """Finds how many pixels a user has placed on all recorded TPE canvases using logkeys."""
-    query = "SELECT canvas, key FROM logkey WHERE user=?"
-    cursor.execute(query, (user_id,))
-    canvases = [str(row[0]) for row in cursor.fetchall() if config.tpe(str(row[0]))]
+    """Finds how many pixels a user has placed on all recorded TPE canvases using user logfiles."""
     ple_dir = config.pxlslog_explorer_dir
+    user_log_file_pattern = f'{ple_dir}/pxls-userlogs-tib/{user_id}_pixels_c*.log'
+    found_user_logs = glob.glob(user_log_file_pattern)
+    canvases = []
+    for path in found_user_logs:
+        match = re.search(r'_c(.+?)\.log$', path)
+        if match:
+            canvas_id = match.group(1)
+            if config.tpe(canvas_id):
+                canvases.append(canvas_id)
     results = {}
     total = len(canvases)
     for idx, canvas in enumerate(canvases):
-        if callback:
+        if callback and ((idx + 1) % 10 == 0 or (idx + 1) == total):
             await callback(canvas, idx + 1, total)
         else:
             print(f'Processing c{canvas} ({idx + 1}/{total}) for user {user_id}')
@@ -400,14 +406,52 @@ class placemap(commands.Cog):
                 if not results:
                     await progress.edit(content=f'No logs found for <@{user.id}>')
                     return
-                lines = [f'--- <@{user.id}> ({user.id}) ---']
-                for canvas, stats in results.items():
-                    lines.append(
-                        f'**c{canvas}:** {stats.get('total_pixels', 0)} total, '
-                        f'{stats.get('tpe_pixels', 0)} placed, '
-                        f'{stats.get('tpe_griefs', 0)} griefed'
+                cleaned_results = sorted(results.keys(), key=lambda c: (int(re.sub(r'\D', '', c)), re.sub(r'\d', '', c)))
+                header = f'<@{user.id}> ({user.id})'
+                header2 = f"{'Canvas':<7} | {'Total':>8} | {'For TPE':>8} | {'Griefed':>8}"
+                header_seperator = f"{'-'*7}-+-{'-'*8}-+-{'-'*8}-+-{'-'*8}"
+                pixels_total = sum(stats.get('total_pixels', 0) for stats in results.values())
+                tpe_total = sum(stats.get('tpe_pixels', 0) for stats in results.values())
+                grief_total = sum(stats.get('tpe_griefs', 0) for stats in results.values())
+                lines = []
+                for canvas in cleaned_results:
+                    stats = results[canvas]
+                    total_pixels = stats.get('total_pixels', 0)
+                    tpe_pixels = stats.get('tpe_pixels', 0)
+                    tpe_griefs = stats.get('tpe_griefs', 0)
+                    line = f"{'c'+canvas:<7} | {total_pixels:>8} | {tpe_pixels:>8} | {tpe_griefs:>8}"
+                    lines.append(line)
+                summary = f"{'-'*7}-+-{'-'*8}-+-{'-'*8}-+-{'-'*8}\n{'Total':<7} | {pixels_total:>8} | {tpe_total:>8} | {grief_total:>8}"
+                chunks = []
+                current_chunk = f'{header}\n```{header2}\n{header_seperator}'
+                for line in lines:
+                    if len(current_chunk) + len(line) + 50 > 4000:
+                        current_chunk = f'\n```' # THIS IS A BACKTICK
+                        chunks.append(current_chunk)
+                        current_chunk = f'{header2}\n{header_seperator}\n' + line
+                    else:
+                        current_chunk += '\n' + line
+                current_chunk += f'\n{summary}\n```' # THIS IS A BACKTICK
+                if current_chunk:
+                    chunks.append(current_chunk)
+                if chunks:
+                    first_embed = discord.Embed(
+                        title=f'{user.global_name} ({user.name})',
+                        description=chunks[0],
+                        color=discord.Color.purple()
                         )
-                    await progress.edit(content='\n'.join(lines))
+                    first_embed.set_author(
+                        name=user.global_name or user.name, 
+                        icon_url=user.avatar.url if user.avatar else user.default_avatar.url
+                        )    
+                    await progress.edit(content=None, embed=first_embed)
+                    if len(chunks) > 1:
+                        for chunk in chunks[1:]:
+                            embed = discord.Embed(
+                                description=chunk,
+                                color=discord.Color.purple()
+                                )
+                            await interaction.followup.send(embed=embed, ephemeral=True)
             else:
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
                 return
