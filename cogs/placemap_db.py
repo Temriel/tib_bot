@@ -180,6 +180,81 @@ async def tpe_pixels_count_older(user_id: int, callback=None,) -> dict:
             results[canvas] = (0, 0, 0, 0)
     return results
 
+async def generate_placemap(user: Union[discord.User, discord.Member], canvas: str) -> tuple[bool, dict]:
+    """Helper function to generate a placemap"""
+    async with semaphore:
+        get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
+        ple_dir = config.pxlslog_explorer_dir
+        cursor.execute(get_key, (canvas, user.id)) # does the above
+        user_key = cursor.fetchone()
+        mode = 'normal'
+
+        if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+            return False, {'error': f'Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.'}
+            
+        if not user_key:
+            return False, {'error': f'No log key found for this canvas.'}
+        
+        user_key = user_key[0]
+        if not re.fullmatch(r'[a-z0-9]{512}', user_key):
+            return False, {'error': f'Invalid format! A log key can only contain a-z, and 0-9.'}
+
+        user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
+        filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log', '--output', user_log_file]
+        filter_result = await asyncio.create_subprocess_exec(
+            *filter_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        print(f'Filtering {user_key} for {user} on canvas {canvas}.')
+        stdout, stderr = await filter_result.communicate()
+        stdout_str = stdout.decode('utf-8').strip()
+        stderr_str = stderr.decode('utf-8').strip()
+        print(f'Subprocess output: {stdout_str}')
+        print(f'Subprocess error: {stderr_str}')
+        if filter_result.returncode != 0:
+            return False, {'error': f'Something went wrong when generating the log file! Ping Temriel.'}
+    
+        place = 0
+        undo = 0
+        mod = 0
+        tpe_pixels = 0
+        tpe_griefs = 0
+        with open(user_log_file, 'r') as log_file:
+            for line in log_file:
+                if 'user place' in line:
+                    place += 1
+                elif 'user undo' in line:
+                    undo += 1
+                elif 'mod overwrite' in line:
+                    mod += 1
+        total_pixels = place - undo
+        if config.tpe(canvas):
+            _, palette_path, _ = config.paths(canvas, user.id, mode)
+            temp_pattern = f'template/c{canvas}/*.png' # in tib directory
+            initial_canvas_path=f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
+            tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path)
+        print(f'{total_pixels} pixels placed')
+        print(f'{undo} pixels undone')
+        if config.tpe(canvas):
+            print(f'{tpe_pixels} pixels placed for TPE')
+            print(f'{tpe_griefs} pixels griefed')
+        print(f'{mod} mod overwrites')
+
+        render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
+
+        if render_result.returncode != 0:
+            return False, {'error': f'Something went wrong when generating the placemap! Ping Temriel.'}
+        return True, {
+            'total_pixels': total_pixels,
+            'undo': undo,
+            'mod': mod,
+            'tpe_pixels': tpe_pixels,
+            'tpe_griefs': tpe_griefs,
+            'filename': filename,
+            'output_path': output_path,
+            'user_log_file': user_log_file,
+            'mode': mode
+        }
+    
 class PlacemapAltView(discord.ui.View):
     def __init__(self, user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str, timeout: float = 300):
         super().__init__(timeout=timeout)
@@ -368,6 +443,7 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
 
+# DISCORD COMMANDS BELOW
 class placemap(commands.Cog):
     def __init__(self, client):
         self.client = client
@@ -377,88 +453,6 @@ class placemap(commands.Cog):
         print('Key DB cog loaded')
 
     group = app_commands.Group(name="logkey", description="Add your log key or make a placemap from it :3")
-
-    @group.command(name='force-add', description='Force add a logkey for a user (ADMIN ONLY).') 
-    async def placemap_db_add_admin(self, interaction: discord.Interaction):
-        """Add a logkey forcefully"""
-        try:
-            if interaction.user.id == owner_id:
-                modal = placemapDBAddAdmin()
-                await interaction.response.send_modal(modal)
-            else:
-                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
-            print(f'An error occurred: {e}')
-    
-    @group.command(name='force-check', description='Forcefully check how many pixels a user has placed on all recorded canvases (ADMIN ONLY).')
-    async def placemap_db_force_check(self, interaction: discord.Interaction, user: discord.User):
-        """Checks how many pixels a user has placed for TPE using logkeys - going past the limit of /logkey generate only checking after the feature was implemented."""
-        try:
-            if interaction.user.id == owner_id:
-                await interaction.response.defer(ephemeral=True,thinking=True)
-                progress = await interaction.followup.send(f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases...', ephemeral=True, wait=True)
-                async def callback(canvas, idx, total):
-                    """Update the message so you can see THINGS are HAPPENING."""
-                    await progress.edit(content=f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases... (c{canvas} {idx}/{total})')
-                    print(f'Processing c{canvas} ({idx}/{total}) for user {user.id}')
-                results = await tpe_pixels_count_older(user.id, callback=callback)
-                if not results:
-                    await progress.edit(content=f'No logs found for <@{user.id}>')
-                    return
-                cleaned_results = sorted(results.keys(), key=lambda c: (int(re.sub(r'\D', '', c)), re.sub(r'\d', '', c)))
-                header = f'<@{user.id}> ({user.id})'
-                header2 = f"{'Canvas':<7} | {'Total':>8} | {'For TPE':>8} | {'Griefed':>8}"
-                header_seperator = f"{'-'*7}-+-{'-'*8}-+-{'-'*8}-+-{'-'*8}"
-                pixels_total = sum(stats.get('total_pixels', 0) for stats in results.values())
-                tpe_total = sum(stats.get('tpe_pixels', 0) for stats in results.values())
-                grief_total = sum(stats.get('tpe_griefs', 0) for stats in results.values())
-                lines = []
-                for canvas in cleaned_results:
-                    stats = results[canvas]
-                    total_pixels = stats.get('total_pixels', 0)
-                    tpe_pixels = stats.get('tpe_pixels', 0)
-                    tpe_griefs = stats.get('tpe_griefs', 0)
-                    line = f"{'c'+canvas:<7} | {total_pixels:>8} | {tpe_pixels:>8} | {tpe_griefs:>8}"
-                    lines.append(line)
-                summary = f"{'-'*7}-+-{'-'*8}-+-{'-'*8}-+-{'-'*8}\n{'Total':<7} | {pixels_total:>8} | {tpe_total:>8} | {grief_total:>8}"
-                chunks = []
-                current_chunk = f'{header}\n```{header2}\n{header_seperator}'
-                for line in lines:
-                    if len(current_chunk) + len(line) + 50 > 4000:
-                        current_chunk = f'\n```' # THIS IS A BACKTICK
-                        chunks.append(current_chunk)
-                        current_chunk = f'{header2}\n{header_seperator}\n' + line
-                    else:
-                        current_chunk += '\n' + line
-                current_chunk += f'\n{summary}\n```' # THIS IS A BACKTICK
-                if current_chunk:
-                    chunks.append(current_chunk)
-                if chunks:
-                    first_embed = discord.Embed(
-                        title=f'{user.global_name} ({user.name})',
-                        description=chunks[0],
-                        color=discord.Color.purple()
-                        )
-                    first_embed.set_author(
-                        name=user.global_name or user.name, 
-                        icon_url=user.avatar.url if user.avatar else user.default_avatar.url
-                        )    
-                    await progress.edit(content=None, embed=first_embed)
-                    if len(chunks) > 1:
-                        for chunk in chunks[1:]:
-                            embed = discord.Embed(
-                                description=chunk,
-                                color=discord.Color.purple()
-                                )
-                            await interaction.followup.send(embed=embed, ephemeral=True)
-            else:
-                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-                return
-        except Exception as e:
-            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
-            print(f'An error occurred: {e}')
-            return
 
     @group.command(name='add', description='Add a log key.') # adds a log key to the database using a fancy ass modal
     async def placemap_db_add(self, interaction: discord.Interaction):
@@ -484,113 +478,212 @@ class placemap(commands.Cog):
     @group.command(name='generate', description='Generate a placemap from a log key.')
     async def placemap_db_generate(self, interaction: discord.Interaction, canvas: str):
         """Generate a placemap by piping the necessary arguments to pxlslog-explorer."""
+        user = interaction.user
+        update_channel_id = config.update_channel()
+        update_channel = interaction.client.get_channel(update_channel_id)
+        start_time = time.time()
         await interaction.response.defer(ephemeral=False,thinking=True)
-        async with semaphore:
-            start_time = time.time()
-            get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
-            user = interaction.user
-            ple_dir = config.pxlslog_explorer_dir
-            cursor.execute(get_key, (canvas, user.id)) # does the above
-            user_key = cursor.fetchone()
-            mode = 'normal'
-            update_channel_id = config.update_channel()
-            update_channel = interaction.client.get_channel(update_channel_id)
+        state, results = await generate_placemap(user, canvas)
 
-            if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
-                await interaction.followup.send('Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.', ephemeral=True)
-                return
-            if not user_key:
-                await interaction.followup.send(f'No log key found for this canvas.')
-                return
-            user_key = user_key[0]
-            if not re.fullmatch(r'[a-z0-9]{512}', user_key):
-                await interaction.followup.send('Invalid format! A log key can only contain a-z, and 0-9.', ephemeral=True)
-                return
-
-            try:
-                user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
-                filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log', '--output', user_log_file]
-                filter_result = await asyncio.create_subprocess_exec(
-                    *filter_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        if state:
+            total_pixels = results.get("total_pixels", 0)
+            undo = results.get("undo", 0)
+            mod = results.get("mod", 0)
+            tpe_pixels = results.get("tpe_pixels", 0)
+            tpe_griefs = results.get("tpe_griefs", 0)
+            filename = results.get("filename", 0)
+            user_log_file = results.get("user_log_file", 0)
+            mode = results.get("mode", 0)
+        else:
+            await interaction.followup.send(results['error'])
+            return
+        if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
+            embed = discord.Embed(
+            title=f'{user} on c{canvas}', 
+            description=f'**User ID:** {user.id}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE griefed:** {tpe_griefs}\n**Mod overwrites:** {mod}',
+            color=discord.Color.purple()
+            )
+            embed.set_author(
+                name=user.global_name or user.name, 
+                icon_url=user.avatar.url if user.avatar else user.default_avatar.url
                 )
-                print(f'Filtering {user_key} for {user} on canvas {canvas}.')
-                stdout, stderr = await filter_result.communicate()
-                stdout_str = stdout.decode('utf-8').strip()
-                stderr_str = stderr.decode('utf-8').strip()
-                print(f'Subprocess output: {stdout_str}')
-                print(f'Subprocess error: {stderr_str}')
-                if filter_result.returncode != 0:
-                    await interaction.followup.send(f'Something went wrong when generating the log file! Ping Temriel.')
-                    return
-            
-                place = 0
-                undo = 0
-                mod = 0
-                tpe_pixels = 0
-                tpe_griefs = 0
-                with open(user_log_file, 'r') as log_file:
-                    for line in log_file:
-                        if 'user place' in line:
-                            place += 1
-                        elif 'user undo' in line:
-                            undo += 1
-                        elif 'mod overwrite' in line:
-                            mod += 1
-                total_pixels = place - undo
-                if config.tpe(canvas):
-                    _, palette_path, _ = config.paths(canvas, user.id, mode)
-                    temp_pattern = f'template/c{canvas}/*.png'
-                    tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path=f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png")
-                print(f'{total_pixels} pixels placed')
-                print(f'{undo} pixels undone')
-                if config.tpe(canvas):
-                    print(f'{tpe_pixels} pixels placed for TPE')
-                    print(f'{tpe_griefs} pixels griefed')
-                print(f'{mod} mod overwrites')
+            await update_channel.send(embed=embed)
 
-                render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
-                # function that checks if pixel matches tpe
+        try: 
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            file = discord.File(results["output_path"], filename=results["filename"])
+            (active_x, active_y), active_count = await most_active(results["user_log_file"])
+            description=f'**Pixels Placed:** {results["total_pixels"]}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels'
+            if config.tpe(canvas):
+                description += f'\n**Pixels for TPE:** {results["tpe_pixels"]}'
+                description += f'\n**Pixels griefed:** {results["tpe_griefs"]}'
+            if mod > 0:
+                description += f'\n**Mod Overwrites:** {mod}'
+            embed = discord.Embed(
+                title=f'Your Placemap for Canvas {canvas}', 
+                description=description,
+                color=discord.Color.purple()
+                )
+            embed.set_author(
+                name=user.global_name or user.name, 
+                icon_url=user.avatar.url if user.avatar else user.default_avatar.url
+                )
+            embed.set_image(url=f'attachment://{filename}')
+            embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
+            view = PlacemapAltView(user, canvas, mode, user_log_file)
+            await interaction.followup.send(embed=embed, file=file, view=view)
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
+            return
 
-                if render_result.returncode == 0:
-                    if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
-                        embed = discord.Embed(
-                        title=f'{user} on c{canvas}', 
-                        description=f'**User ID:** {user.id}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE griefed:** {tpe_griefs}\n**Mod overwrites:** {mod}',
-                        color=discord.Color.purple()
-                        )
-                        embed.set_author(
-                            name=user.global_name or user.name, 
-                            icon_url=user.avatar.url if user.avatar else user.default_avatar.url
-                            )
-                        await update_channel.send(embed=embed)
-                    end_time = time.time()
-                    elapsed_time = end_time - start_time
-                    file = discord.File(output_path, filename=filename)
-                    (active_x, active_y), active_count = await most_active(user_log_file)
-                    description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels'
-                    if config.tpe(canvas):
-                        description += f'\n**Pixels for TPE:** {tpe_pixels}'
-                        description += f'\n**Pixels griefed:** {tpe_griefs}'
-                    if mod > 0:
-                        description += f'\n**Mod Overwrites:** {mod}'
-                    embed = discord.Embed(
-                        title=f'Your Placemap for Canvas {canvas}', 
-                        description=description,
-                        color=discord.Color.purple()
-                        )
-                    embed.set_author(
-                        name=user.global_name or user.name, 
-                        icon_url=user.avatar.url if user.avatar else user.default_avatar.url
-                        )
-                    embed.set_image(url=f'attachment://{filename}')
-                    embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
-                    view = PlacemapAltView(user, canvas, mode, user_log_file)
-                    await interaction.followup.send(embed=embed, file=file, view=view)
+    @group.command(name='force-add', description='Force add a logkey for a user (ADMIN ONLY).') 
+    async def placemap_db_add_admin(self, interaction: discord.Interaction):
+        """Add a logkey forcefully"""
+        try:
+            if interaction.user.id != owner_id:
+                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+                return
+            modal = placemapDBAddAdmin()
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
+
+    @group.command(name='force-generate', description='Forcefully generate a placemap for a user (ADMIN ONLY).')
+    async def placemap_db_generate_admin(self, interaction: discord.Interaction, user: discord.User, canvas: str):
+        """Forcefully generate a placemap by piping the necessary arguments to pxlslog-explorer."""
+        if interaction.user.id != owner_id:
+            await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+            return
+        update_channel_id = config.update_channel()
+        update_channel = interaction.client.get_channel(update_channel_id)
+        start_time = time.time()
+        await interaction.response.defer(ephemeral=False,thinking=True)
+        state, results = await generate_placemap(user, canvas)
+
+        if state:
+            total_pixels = results.get("total_pixels", 0)
+            undo = results.get("undo", 0)
+            mod = results.get("mod", 0)
+            tpe_pixels = results.get("tpe_pixels", 0)
+            tpe_griefs = results.get("tpe_griefs", 0)
+            filename = results.get("filename", 0)
+            user_log_file = results.get("user_log_file", 0)
+            mode = results.get("mode", 0)
+        else:
+            await interaction.followup.send(results['error'])
+            return
+        if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
+            embed = discord.Embed(
+            title=f'{user} on c{canvas}', 
+            description=f'**User ID:** {user.id}\n**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE Griefed:** {tpe_griefs}\n**Mod Overwrites:** {mod}',
+            color=discord.Color.red()
+            )
+            embed.set_author(
+                name=user.global_name or user.name, 
+                icon_url=user.avatar.url if user.avatar else user.default_avatar.url
+                )
+            await update_channel.send(embed=embed)
+
+        try: 
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            file = discord.File(results["output_path"], filename=results["filename"])
+            (active_x, active_y), active_count = await most_active(results["user_log_file"])
+            description=f'**Pixels Placed:** {results["total_pixels"]}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels'
+            if config.tpe(canvas):
+                description += f'\n**Pixels for TPE:** {results["tpe_pixels"]}'
+                description += f'\n**Pixels Griefed:** {results["tpe_griefs"]}'
+            if mod > 0:
+                description += f'\n**Mod Overwrites:** {mod}'
+            embed = discord.Embed(
+                title=f'Your Placemap for Canvas {canvas}', 
+                description=description,
+                color=discord.Color.red()
+                )
+            embed.set_author(
+                name=user.global_name or user.name, 
+                icon_url=user.avatar.url if user.avatar else user.default_avatar.url
+                )
+            embed.set_image(url=f'attachment://{filename}')
+            embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
+            view = PlacemapAltView(user, canvas, mode, user_log_file)
+            await interaction.followup.send(embed=embed, file=file, view=view)
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
+            return
+    
+    @group.command(name='force-check', description='Forcefully check how many pixels a user has placed on all recorded canvases (ADMIN ONLY).')
+    async def placemap_db_force_check(self, interaction: discord.Interaction, user: discord.User):
+        """Checks how many pixels a user has placed for TPE using logkeys - going past the limit of /logkey generate only checking after the feature was implemented."""
+        try:
+            if interaction.user.id != owner_id:
+                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+                return
+            await interaction.response.defer(ephemeral=True,thinking=True)
+            progress = await interaction.followup.send(f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases...', ephemeral=True, wait=True)
+            async def callback(canvas, idx, total):
+                """Update the message so you can see THINGS are HAPPENING."""
+                await progress.edit(content=f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases... (c{canvas} {idx}/{total})')
+                print(f'Processing c{canvas} ({idx}/{total}) for user {user.id}')
+            results = await tpe_pixels_count_older(user.id, callback=callback)
+            if not results:
+                await progress.edit(content=f'No logs found for <@{user.id}>')
+                return
+            cleaned_results = sorted(results.keys(), key=lambda c: (int(re.sub(r'\D', '', c)), re.sub(r'\d', '', c)))
+            header = f'<@{user.id}> ({user.id})'
+            header2 = f"{'Canvas':<6} | {'Placed':>7} | {'For TPE':>7} | {'Griefed':>7}"
+            header_seperator = f"{'-'*6}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}"
+            pixels_total = sum(stats.get('total_pixels', 0) for stats in results.values())
+            tpe_total = sum(stats.get('tpe_pixels', 0) for stats in results.values())
+            grief_total = sum(stats.get('tpe_griefs', 0) for stats in results.values())
+            lines = []
+            for canvas in cleaned_results:
+                stats = results[canvas]
+                total_pixels = stats.get('total_pixels', 0)
+                tpe_pixels = stats.get('tpe_pixels', 0)
+                tpe_griefs = stats.get('tpe_griefs', 0)
+                line = f"{'c'+canvas:<6} | {total_pixels:>7} | {tpe_pixels:>7} | {tpe_griefs:>7}"
+                lines.append(line)
+            summary = f"{'-'*6}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}\n{'Total':<6} | {pixels_total:>7} | {tpe_total:>7} | {grief_total:>7}"
+            chunks = []
+            current_chunk = f'{header}\n```{header2}\n{header_seperator}'
+            for line in lines:
+                if len(current_chunk) + len(line) + 50 > 4000:
+                    current_chunk = f'\n```' # THIS IS A BACKTICK
+                    chunks.append(current_chunk)
+                    current_chunk = f'{header2}\n{header_seperator}\n' + line
                 else:
-                    await interaction.followup.send(f'An error occurred! Ping Temriel.')
-            except Exception as e:
-                await interaction.followup.send(f'An error occurred! Check the logs.')
-                print(f'An error occurred: {e}')
+                    current_chunk += '\n' + line
+            current_chunk += f'\n{summary}\n```' # THIS IS A BACKTICK
+            if current_chunk:
+                chunks.append(current_chunk)
+            if chunks:
+                first_embed = discord.Embed(
+                    title=f'{user.global_name} ({user.name})',
+                    description=chunks[0],
+                    color=discord.Color.purple()
+                    )
+                first_embed.set_author(
+                    name=user.global_name or user.name, 
+                    icon_url=user.avatar.url if user.avatar else user.default_avatar.url
+                    )    
+                await progress.edit(content=None, embed=first_embed)
+                if len(chunks) > 1:
+                    for chunk in chunks[1:]:
+                        embed = discord.Embed(
+                            description=chunk,
+                            color=discord.Color.purple()
+                            )
+                        await interaction.followup.send(embed=embed, ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
+            return
 
 async def setup(client):
     await client.add_cog(placemap(client))

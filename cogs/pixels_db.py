@@ -169,43 +169,43 @@ class db(commands.Cog):
         """Add pixels to a user in the database. Needed values are user, canvas & pixels."""
         query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)"
         try:
-            if interaction.user.id == owner_id:
-                if not isinstance(canvas, str):
-                    canvas = str(canvas)
-                if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
-                    await interaction.response.send_message("Invalid format! A canvas code can only contain a-z and 0-9.", ephemeral=True)
-                    return
-                cursor.execute("SELECT SUM(pixels) FROM points WHERE user=?", (user,))
-                prev_total = cursor.fetchone()[0] or 0
-                prev_rank = "nothing"
-                ranks = config.ranks()
-                for threshold, name in ranks:
-                    if prev_total >= threshold:
-                        prev_rank = name
-                        break
-                if prev_total < 0:
-                    prev_rank = "griefer"
-                cursor.execute(query, (str(user), canvas, pixels)) # the reason we define query is to make sure cursor.execute isn't Huge
-                database.commit()
-                cursor.execute("SELECT SUM(pixels) FROM points WHERE user=?", (user,))
-                new_total = cursor.fetchone()[0] or 0
-                new_rank = "nothing"
-                for threshold, name in ranks:
-                    if new_total >= threshold:
-                        new_rank = name
-                        break
-                if new_total < 0:
-                    new_rank = "griefer"
-                if prev_rank != new_rank:
-                    update_channel = interaction.client.get_channel(update_channel_id)
-                    if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
-                        await update_channel.send(f'**{user}** should now be **{new_rank}**. They have **{new_total}** pixels placed.')
-                    else:
-                        print(f'Does not work for {type(update_channel)}. If this error still peresists, double check the channel ID in config.py, and that the bot has access to it')
-                await interaction.response.send_message(f"Added {pixels} pixels for {user} on c{canvas}!")
-                print (f"Added {pixels} pixels for {user} on canvas {canvas}")
-            else:
+            if interaction.user.id != owner_id:
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+                return
+            if not isinstance(canvas, str):
+                canvas = str(canvas)
+            if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+                await interaction.response.send_message("Invalid format! A canvas code can only contain a-z and 0-9.", ephemeral=True)
+                return
+            cursor.execute("SELECT SUM(pixels) FROM points WHERE user=?", (user,))
+            prev_total = cursor.fetchone()[0] or 0
+            prev_rank = "nothing"
+            ranks = config.ranks()
+            for threshold, name in ranks:
+                if prev_total >= threshold:
+                    prev_rank = name
+                    break
+            if prev_total < 0:
+                prev_rank = "griefer"
+            cursor.execute(query, (str(user), canvas, pixels)) # the reason we define query is to make sure cursor.execute isn't Huge
+            database.commit()
+            cursor.execute("SELECT SUM(pixels) FROM points WHERE user=?", (user,))
+            new_total = cursor.fetchone()[0] or 0
+            new_rank = "nothing"
+            for threshold, name in ranks:
+                if new_total >= threshold:
+                    new_rank = name
+                    break
+            if new_total < 0:
+                new_rank = "griefer"
+            if prev_rank != new_rank:
+                update_channel = interaction.client.get_channel(update_channel_id)
+                if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
+                    await update_channel.send(f'**{user}** should now be **{new_rank}**. They have **{new_total}** pixels placed.')
+                else:
+                    print(f'Does not work for {type(update_channel)}. If this error still peresists, double check the channel ID in config.py, and that the bot has access to it')
+            await interaction.response.send_message(f"Added {pixels} pixels for {user} on c{canvas}!")
+            print (f"Added {pixels} pixels for {user} on canvas {canvas}")
         except Exception as e:
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
@@ -234,6 +234,7 @@ class db(commands.Cog):
 
     @app_commands.command(name='list', description='See how much people have placed for us.')
     async def pixels_db_list(self, interaction: discord.Interaction, canvas: Optional[str] = None):
+        """Create a user leaderboard."""
         start_time = time.time()
         if canvas:
             if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
