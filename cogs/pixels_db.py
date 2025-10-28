@@ -299,6 +299,7 @@ class db(commands.Cog):
             await interaction.response.send_message(f"**{who_pxls_username}** has placed **{total}** pixels for us. They have the rank of **{rank}**.")
 
     @app_commands.command(name='list', description='See how much people have placed for us.')
+    @app_commands.describe(canvas='Canvas code to filter by (no c).')
     async def pixels_db_list(self, interaction: discord.Interaction, canvas: Optional[str] = None):
         """Create a user leaderboard."""
         start_time = time.time()
