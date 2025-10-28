@@ -219,10 +219,12 @@ class db(commands.Cog):
             if interaction.user.id != owner_id:
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
                 return
-            cursor.execute(query, (username))
+            cursor.execute(query, (username,))
             database.commit()
             if cursor.rowcount > 0:
                 await interaction.response.send_message(f'Successfully unlinked **{username}**!')
+            else:
+                await interaction.response.send_message(f'No linked user found for **{username}**.', ephemeral=True)
         except Exception as e:
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
