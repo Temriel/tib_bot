@@ -42,7 +42,7 @@ async def shutdown(interaction: discord.Interaction):
 @tree.command(name='sync', description='Sync (ADMIN ONLY)')
 async def sync(interaction: discord.Interaction):
     """Sync commands to Discord (DO NOT SPAM)"""
-    if interaction.user.id == owner_id:
+    if interaction.user.id != owner_id:
         await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
         return
     fmt = await tree.sync()

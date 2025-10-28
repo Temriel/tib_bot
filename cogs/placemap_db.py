@@ -12,6 +12,7 @@ import csv
 # from collections import defaultdict
 from PIL import Image 
 import glob
+import os
 
 owner_id = config.owner()
 
@@ -135,7 +136,7 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     tpe_griefs = sum(tpe_grief.values())
     return tpe_pixels - tpe_griefs, tpe_griefs
 
-async def tpe_pixels_count_older(user_id: int, callback=None,) -> dict:
+async def tpe_pixels_count_user(user_id: int, callback = None) -> dict:
     """Finds how many pixels a user has placed on all recorded TPE canvases using user logfiles."""
     ple_dir = config.pxlslog_explorer_dir
     user_log_file_pattern = f'{ple_dir}/pxls-userlogs-tib/{user_id}_pixels_c*.log'
@@ -178,6 +179,53 @@ async def tpe_pixels_count_older(user_id: int, callback=None,) -> dict:
         except Exception as e:
             print(f'An error occurred while processing canvas {canvas} for user {user_id}: {e}')
             results[canvas] = (0, 0, 0, 0)
+    return results
+
+async def tpe_pixels_count_canvas(canvas: str, callback = None) -> dict:
+    """Find how many pixels have been placed on a specific canvas by all registered users. Those with no data are ignored."""
+    if not config.tpe(canvas):
+        print(f'Canvas c{canvas} is not a TPE canvas.')
+        return {}
+    ple_dir = config.pxlslog_explorer_dir
+    user_log_file_pattern = f'{ple_dir}/pxls-userlogs-tib/*_pixels_c{canvas}.log'
+    found_user_logs = glob.glob(user_log_file_pattern)
+    results = {}
+    total = len(found_user_logs)
+    for idx, user_log_file in enumerate(found_user_logs):
+        user_id = -1
+        basename = os.path.basename(user_log_file)
+        match = re.match(r'(\d+)_pixels_c', basename)
+        if not match:
+            print(f'Could not extract user ID from filename: {basename}')
+            continue
+        user_id = int(match.group(1))
+        if callback and ((idx + 1) % 10 == 0 or (idx + 1) == total):
+            await callback(user_id, idx + 1, total)
+        else:
+            print(f'Processing user {user_id} ({idx + 1}/{total}) for c{canvas}')
+        _, palette_path, _ = config.paths(canvas, user_id, 'normal')
+        temp_pattern = f'template/c{canvas}/*.png'
+        initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
+        place = 0
+        undo = 0
+        try:
+            with open(user_log_file, 'r') as log_key:
+                for line in log_key:
+                    if 'user place' in line:
+                        place += 1
+                    elif 'user undo' in line:
+                        undo += 1  
+            total_pixels = place - undo
+            tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path)
+            results[user_id] = {
+                'total_pixels': total_pixels,
+                'undo': undo,
+                'tpe_pixels': tpe_pixels,
+                'tpe_griefs': tpe_griefs,
+                }
+        except Exception as e:
+            print(f'An error occurred while processing canvas {canvas} for user {user_id}: {e}')
+            results[user_id] = (0, 0, 0, 0)
     return results
 
 async def generate_placemap(user: Union[discord.User, discord.Member], canvas: str) -> tuple[bool, dict]:
@@ -354,8 +402,10 @@ class placemapDBAdd(discord.ui.Modal, title='Add your log key.'):
         
         user = interaction.user
         query = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)" # the three question marks represents the above "user", "canvas", and "logkey"
+        query2 = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
         try:
             cursor.execute(query, (user.id, self.canvas.value, self.key.value)) # we use user.id to store the ID instead of the user string - das bad
+            cursor.execute(query2, (user.id,))
             database.commit()
             print(f'Log key added for {user} ({user.id}) on canvas {self.canvas.value}.')
             await interaction.response.send_message(f'Added key for canvas {self.canvas.value}!', ephemeral=True)
@@ -375,70 +425,73 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
 
     async def on_submit(self, interaction: discord.Interaction):
         query = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)"
+        query2 = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
         try:
-            if interaction.user.id == owner_id:
-                user_canvases = [x.strip() for x in self.user_canvas.value.split(',')]
-                keys = [x.strip() for x in self.key.value.split(',')]
-                if len(user_canvases) < 2:
-                    await interaction.response.send_message('You must provide a user ID and at least one canvas.', ephemeral=True)
-                    return
-                
-                if len(user_canvases[0]) > 4: # one user, multiple canvases
-                    user_id = int(user_canvases[0])
-                    canvases = user_canvases[1:]
-                    if len(keys) != len(canvases):
-                        await interaction.response.send_message('The number of keys must match the number of canvases.', ephemeral=True)
-                        return
-                    success = []
-                    fail = []
-                    for canvas, key in zip(canvases, keys):
-                        if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
-                            fail.append((f'c{canvas}, Invalid canvas format'))
-                            continue
-                        if not re.fullmatch(r'[a-z0-9]{512}', key):
-                            fail.append((f'c{canvas}, Invalid key format'))
-                            continue
-                        try:
-                            cursor.execute(query, (user_id, canvas, key))
-                            database.commit()
-                            success.append(f'c{canvas}')
-                        except sqlite3.OperationalError as e:
-                            fail.append((f'c{canvas}, SQLite error: {e}'))
-                        except Exception as e:
-                            fail.append((f'c{canvas}, Error: {e}'))
-                    message = f'<@{user_id}> ({user_id}) now has keys for canvases: {', '.join(success)}'
-                    if fail:
-                        message += f'\nFailed for canvases: {', '.join(fail)}'
-                    await interaction.response.send_message(message, ephemeral=True)
-                else:
-                    canvas = user_canvases[0]
-                    user_ids = user_canvases[1:]
-                    if len(keys) != len(user_ids):
-                        await interaction.response.send_message('The number of keys must match the number of canvases.', ephemeral=True)
-                        return
-                    success = []
-                    fail = []
-                    for user_id, key in zip(user_ids, keys):
-                        if not re.fullmatch(r'\d{17,}', user_id):
-                            fail.append((f'<@{user_id}> ({user_id}), Invalid user ID format'))
-                            continue
-                        if not re.fullmatch(r'[a-z0-9]{512}', key):
-                            fail.append((f'<@{user_id}> ({user_id}), Invalid key format'))
-                            continue
-                        try:
-                            cursor.execute(query, (int(user_id), canvas, key))
-                            database.commit()
-                            success.append(f'<@{user_id}> ({user_id})')
-                        except sqlite3.OperationalError as e:
-                            fail.append((f'{user_id}, SQLite error: {e}'))
-                        except Exception as e:
-                            fail.append((f'{user_id}, Error: {e}'))
-                    message = f'c{canvas} now has logkeys for: {', '.join(success)}'
-                    if fail:
-                        message += f'\nFailed for users: {', '.join(fail)}'
-                    await interaction.response.send_message(message, ephemeral=True)
-            else:
+            if interaction.user.id != owner_id:
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+                return
+            user_canvases = [x.strip() for x in self.user_canvas.value.split(',')]
+            keys = [x.strip() for x in self.key.value.split(',')]
+            if len(user_canvases) < 2:
+                await interaction.response.send_message('You must provide a user ID and at least one canvas.', ephemeral=True)
+                return
+            
+            if len(user_canvases[0]) > 4: # one user, multiple canvases
+                user_id = int(user_canvases[0])
+                canvases = user_canvases[1:]
+                if len(keys) != len(canvases):
+                    await interaction.response.send_message('The number of keys must match the number of canvases.', ephemeral=True)
+                    return
+                success = []
+                fail = []
+                for canvas, key in zip(canvases, keys):
+                    if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+                        fail.append((f'c{canvas}, Invalid canvas format'))
+                        continue
+                    if not re.fullmatch(r'[a-z0-9]{512}', key):
+                        fail.append((f'c{canvas}, Invalid key format'))
+                        continue
+                    try:
+                        cursor.execute(query, (user_id, canvas, key))
+                        cursor.execute(query2, (user_id,))
+                        database.commit()
+                        success.append(f'c{canvas}')
+                    except sqlite3.OperationalError as e:
+                        fail.append((f'c{canvas}, SQLite error: {e}'))
+                    except Exception as e:
+                        fail.append((f'c{canvas}, Error: {e}'))
+                message = f'<@{user_id}> ({user_id}) now has keys for canvases: {', '.join(success)}'
+                if fail:
+                    message += f'\nFailed for canvases: {', '.join(fail)}'
+                await interaction.response.send_message(message, ephemeral=True)
+            else:
+                canvas = user_canvases[0]
+                user_ids = user_canvases[1:]
+                if len(keys) != len(user_ids):
+                    await interaction.response.send_message('The number of keys must match the number of canvases.', ephemeral=True)
+                    return
+                success = []
+                fail = []
+                for user_id, key in zip(user_ids, keys):
+                    if not re.fullmatch(r'\d{17,}', user_id):
+                        fail.append((f'<@{user_id}> ({user_id}), Invalid user ID format'))
+                        continue
+                    if not re.fullmatch(r'[a-z0-9]{512}', key):
+                        fail.append((f'<@{user_id}> ({user_id}), Invalid key format'))
+                        continue
+                    try:
+                        cursor.execute(query, (int(user_id), canvas, key))
+                        cursor.execute(query2, (user_id,))
+                        database.commit()
+                        success.append(f'<@{user_id}> ({user_id})')
+                    except sqlite3.OperationalError as e:
+                        fail.append((f'{user_id}, SQLite error: {e}'))
+                    except Exception as e:
+                        fail.append((f'{user_id}, Error: {e}'))
+                message = f'c{canvas} now has logkeys for: {', '.join(success)}'
+                if fail:
+                    message += f'\nFailed for users: {', '.join(fail)}'
+                await interaction.response.send_message(message, ephemeral=True)
         except Exception as e:
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
@@ -617,20 +670,20 @@ class placemap(commands.Cog):
             print(f'An error occurred: {e}')
             return
     
-    @group.command(name='force-check', description='Forcefully check how many pixels a user has placed on all recorded canvases (ADMIN ONLY).')
-    async def placemap_db_force_check(self, interaction: discord.Interaction, user: discord.User):
+    @group.command(name='force-check-user', description='Forcefully check how many pixels a user has placed on all recorded canvases (ADMIN ONLY).')
+    async def placemap_db_force_check_user(self, interaction: discord.Interaction, user: discord.User):
         """Checks how many pixels a user has placed for TPE using logkeys - going past the limit of /logkey generate only checking after the feature was implemented."""
         try:
             if interaction.user.id != owner_id:
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
                 return
-            await interaction.response.defer(ephemeral=True,thinking=True)
+            await interaction.response.defer(ephemeral=True, thinking=True)
             progress = await interaction.followup.send(f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases...', ephemeral=True, wait=True)
             async def callback(canvas, idx, total):
                 """Update the message so you can see THINGS are HAPPENING."""
                 await progress.edit(content=f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases... (c{canvas} {idx}/{total})')
                 print(f'Processing c{canvas} ({idx}/{total}) for user {user.id}')
-            results = await tpe_pixels_count_older(user.id, callback=callback)
+            results = await tpe_pixels_count_user(user.id, callback=callback)
             if not results:
                 await progress.edit(content=f'No logs found for <@{user.id}>')
                 return
@@ -643,7 +696,7 @@ class placemap(commands.Cog):
             grief_total = sum(stats.get('tpe_griefs', 0) for stats in results.values())
             lines = []
             for canvas in cleaned_results:
-                stats = results[canvas]
+                stats = results.get(canvas, {})
                 total_pixels = stats.get('total_pixels', 0)
                 tpe_pixels = stats.get('tpe_pixels', 0)
                 tpe_griefs = stats.get('tpe_griefs', 0)
@@ -664,7 +717,7 @@ class placemap(commands.Cog):
                 chunks.append(current_chunk)
             if chunks:
                 first_embed = discord.Embed(
-                    title=f'{user.global_name} ({user.name})',
+                    title=f'Stats for {user.global_name} ({user.name})',
                     description=chunks[0],
                     color=discord.Color.purple()
                     )
@@ -681,9 +734,76 @@ class placemap(commands.Cog):
                             )
                         await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            await interaction.followup.send('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
             return
+
+    @group.command(name='force-check-canvas', description='Forcefully check how many pixels all users have placed on a specific canvas (ADMIN ONLY).')
+    async def placemap_db_force_check_canvas(self, interaction: discord.Interaction, canvas: str):
+        """Checks how many pixels all users have placed for TPE on a specific canvas using logkeys - going past the limit of /logkey generate only checking after the feature was implemented."""
+        try:
+            if interaction.user.id != owner_id:
+                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+                return
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            progress = await interaction.followup.send(f'Checking how many pixels have been placed on canvas {canvas}...', ephemeral=True, wait=True)
+            async def callback(user_id, idx, total):
+                """Update the message so you can see THINGS are HAPPENING."""
+                await progress.edit(content=f'Checking how many pixels have been placed on canvas {canvas}... (user {user_id} {idx}/{total})')
+                print(f'Processing user {user_id} ({idx}/{total}) for c{canvas}')
+            results = await tpe_pixels_count_canvas(canvas, callback=callback)
+            if not results:
+                await progress.edit(content=f'No logs found for c{canvas}')
+                return
+            cursor.execute('SELECT user_id, username FROM users WHERE username IS NOT NULL')
+            linked_users = dict(cursor.fetchall())
+            cleaned_results = sorted(results.keys(), key=lambda user_id: results[user_id].get('tpe_pixels', 0), reverse=True)
+            header2 = f"{'User':<20} | {'Placed':>7} | {'For TPE':>7} | {'Griefed':>7}"
+            header_seperator = f"{'-'*20}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}"
+            pixels_total = sum(stats.get('total_pixels', 0) for stats in results.values())
+            tpe_total = sum(stats.get('tpe_pixels', 0) for stats in results.values())
+            grief_total = sum(stats.get('tpe_griefs', 0) for stats in results.values())
+            lines = []
+            for user_id in cleaned_results:
+                stats = results.get(user_id, {})
+                total_pixels = stats.get('total_pixels', 0)
+                tpe_pixels = stats.get('tpe_pixels', 0)
+                tpe_griefs = stats.get('tpe_griefs', 0)
+                name = linked_users.get(user_id, str(user_id))
+                line = f"{name:<20} | {total_pixels:>7} | {tpe_pixels:>7} | {tpe_griefs:>7}"
+                lines.append(line)
+            summary = f"{'-'*20}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}\n{'Total':<20} | {pixels_total:>7} | {tpe_total:>7} | {grief_total:>7}"
+            chunks = []
+            current_chunk = f'```{header2}\n{header_seperator}'
+            for line in lines:
+                if len(current_chunk) + len(line) + 50 > 4000:
+                    current_chunk = f'\n```' # THIS IS A BACKTICK
+                    chunks.append(current_chunk)
+                    current_chunk = f'{header2}\n{header_seperator}\n' + line
+                else:
+                    current_chunk += '\n' + line
+            current_chunk += f'\n{summary}\n```' # THIS IS A BACKTICK
+            if current_chunk:
+                chunks.append(current_chunk)
+            if chunks:
+                first_embed = discord.Embed(
+                    title=f'Logfile-based leaderboard for c{canvas}',
+                    description=chunks[0],
+                    color=discord.Color.purple()
+                    )
+
+                await progress.edit(content=None, embed=first_embed)
+                if len(chunks) > 1:
+                    for chunk in chunks[1:]:
+                        embed = discord.Embed(
+                            description=chunk,
+                            color=discord.Color.purple()
+                            )
+                        await interaction.followup.send(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            await interaction.followup.send('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
 
 async def setup(client):
     await client.add_cog(placemap(client))

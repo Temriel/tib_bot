@@ -7,11 +7,12 @@ import time
 import io
 import re
 import config
-from typing import Optional
+from typing import Union, Optional
 
 database = sqlite3.connect('database.db')
 cursor = database.cursor()
 database.execute('CREATE TABLE IF NOT EXISTS points(user STR, canvas STR, pixels INT, PRIMARY KEY (user, canvas))')
+database.execute('CREATE TABLE IF NOT EXISTS users (user_id INT, username STR UNIQUE, PRIMARY KEY (user_id))')
 
 owner_id = config.owner()
 update_channel_id = config.update_channel()
@@ -155,6 +156,30 @@ class LeaderboardView(discord.ui.View):
         embed.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {self.current_page}/{self.total_pages}')
         await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
 
+def get_linked_username(user_id: int) -> Optional[str]:
+    """Get the linked Pxls username for a given Discord user ID."""
+    query = "SELECT username FROM users WHERE user_id = ?"
+    cursor.execute(query, (user_id,))
+    result = cursor.fetchone()
+    return result[0] if result else None
+
+def get_stats(pxls_username: str) -> dict:
+    """Get pixel stats for a given Pxls username."""
+    query = "SELECT SUM(pixels) FROM points WHERE user = ?"
+    cursor.execute(query, (pxls_username,))
+    total = cursor.fetchone()[0] or 0
+    rank = "nothing"
+    if total is None:
+        total = 0
+    if total < 0:
+        rank = "griefer"
+    ranks = config.ranks()
+    for threshold, name in ranks:
+        if total >= threshold:
+            rank = name
+            break
+    return {'total': total, 'rank': rank}
+
 class db(commands.Cog):
     def __init__(self, client):
         self.client = client
@@ -162,7 +187,47 @@ class db(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print('Main DB cog loaded.')
-    
+        
+    # Discord user related logic
+    @app_commands.command(name='link', description='Link a Pxls username with a Discord user (ADMIN ONLY).')
+    @app_commands.describe(userid='The Discord user to link to.', username='The Pxls username to link.')
+    async def pixels_db_link(self, interaction: discord.Interaction, userid: discord.User, username: str):
+        """Link a Pxls username to a Discord user."""
+        query = "INSERT OR REPLACE INTO users VALUES (?, ?)"
+        try:
+            if interaction.user.id != owner_id:
+                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+                return
+            cursor.execute(query, (userid.id, username))
+            database.commit()
+            await interaction.response.send_message(f'Successfully linked **{username}** to **{userid}**!')
+        except sqlite3.IntegrityError:
+            await interaction.response.send_message(f'Error! The username **{username}** is already linked to another user.', ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
+
+    @app_commands.command(name='unlink', description='Unink a Pxls username from a Discord user (ADMIN ONLY).')
+    @app_commands.describe(username='The Pxls username to unlink.')
+    async def pixels_db_unlink(self, interaction: discord.Interaction, username: str):
+        """Unink a Pxls username from a Discord user."""
+        query = "UPDATE users SET username = NULL WHERE username = ?"
+        if not re.fullmatch(r'^[a-zA-Z0-9_-]{1,32}$', username):
+            await interaction.response.send_message('Invalid username', ephemeral=True)
+            return
+        try:
+            if interaction.user.id != owner_id:
+                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+                return
+            cursor.execute(query, (username))
+            database.commit()
+            if cursor.rowcount > 0:
+                await interaction.response.send_message(f'Successfully unlinked **{username}**!')
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
+
+    # Pxls related logic
     @app_commands.command(name='add-pixels', description='Add pixels to a user (ADMIN ONLY)')
     @app_commands.describe(user='The user to add pixels to.', canvas='Canvas number (no c).', pixels='Amount placed.')
     async def pixels_db_add(self, interaction: discord.Interaction, user: str, canvas: str, pixels: int):
@@ -177,27 +242,13 @@ class db(commands.Cog):
             if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
                 await interaction.response.send_message("Invalid format! A canvas code can only contain a-z and 0-9.", ephemeral=True)
                 return
-            cursor.execute("SELECT SUM(pixels) FROM points WHERE user=?", (user,))
-            prev_total = cursor.fetchone()[0] or 0
-            prev_rank = "nothing"
-            ranks = config.ranks()
-            for threshold, name in ranks:
-                if prev_total >= threshold:
-                    prev_rank = name
-                    break
-            if prev_total < 0:
-                prev_rank = "griefer"
+            prev_stats = get_stats(user)
+            prev_rank = prev_stats['rank']
             cursor.execute(query, (str(user), canvas, pixels)) # the reason we define query is to make sure cursor.execute isn't Huge
             database.commit()
-            cursor.execute("SELECT SUM(pixels) FROM points WHERE user=?", (user,))
-            new_total = cursor.fetchone()[0] or 0
-            new_rank = "nothing"
-            for threshold, name in ranks:
-                if new_total >= threshold:
-                    new_rank = name
-                    break
-            if new_total < 0:
-                new_rank = "griefer"
+            new_stats = get_stats(user)
+            new_total = new_stats['total']
+            new_rank = new_stats['rank']
             if prev_rank != new_rank:
                 update_channel = interaction.client.get_channel(update_channel_id)
                 if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
@@ -211,26 +262,39 @@ class db(commands.Cog):
             print(f'An error occurred: {e}')
 
     @app_commands.command(name='lookup', description='See how many pixels a certain user has placed for us.')
-    @app_commands.describe(profile='Who do you want to look up?')
-    async def pixels_db_lookup(self, interaction: discord.Interaction, profile: str):
+    @app_commands.describe(pxls_username='Pxls username to look up.')
+    @app_commands.describe(discord_user='Discord username to look up.')
+    async def pixels_db_lookup(self, interaction: discord.Interaction, pxls_username: Optional[str] = None, discord_user: Optional[discord.User] = None):
         """Find the total pixel count for a user & their rank (defined in config.py)"""
-        if not re.fullmatch(r'^[a-zA-Z0-9_-]{1,32}$', profile):
-            await interaction.response.send_message('Invalid username', ephemeral=True)
+        who_pxls_username: Optional[str] = None
+        who_discord_user: Optional[Union[discord.User, discord.Member]] = None
+        if pxls_username and discord_user:
+            await interaction.response.send_message('Please provide either a Pxls username or a Discord user, not both.', ephemeral=True)
             return
-        get_users = "SELECT SUM(pixels) FROM points WHERE user=?"
-        cursor.execute(get_users, (profile,))
-        total = cursor.fetchone()[0]
-        rank = "nothing"
-        if total is None:
-            total = 0
-        if total < 0:
-            rank = "griefer"
-        ranks = config.ranks()
-        for threshold, name in ranks:
-            if total >= threshold:
-                rank = name
-                break
-        await interaction.response.send_message(f"**{profile}** has placed **{total}** pixels for us. They have the rank of **{rank}**.")
+        elif pxls_username:
+            if not re.fullmatch(r'^[a-zA-Z0-9_-]{1,32}$', pxls_username):
+                await interaction.response.send_message('Invalid username', ephemeral=True)
+                return
+            who_pxls_username = pxls_username
+        elif discord_user:
+            who_pxls_username = get_linked_username(discord_user.id)
+            who_discord_user = discord_user
+            if not who_pxls_username:
+                await interaction.response.send_message(f'{discord_user} does not have a linked Pxls username (yet)', ephemeral=True)
+                return
+        else:
+            who_discord_user = interaction.user
+            who_pxls_username = get_linked_username(who_discord_user.id) # "id" is not a known attribute of "None"
+            if not who_pxls_username:
+                await interaction.response.send_message(f'You do not have a linked Pxls username (yet).', ephemeral=True)
+                return
+        stats = get_stats(who_pxls_username)
+        total = stats['total']
+        rank = stats['rank']
+        if who_discord_user:
+            await interaction.response.send_message(f"**{who_discord_user}** (Pxls username: **{who_pxls_username}**) has placed **{total}** pixels for us. They have the rank of **{rank}**.")
+        else:
+            await interaction.response.send_message(f"**{who_pxls_username}** has placed **{total}** pixels for us. They have the rank of **{rank}**.")
 
     @app_commands.command(name='list', description='See how much people have placed for us.')
     async def pixels_db_list(self, interaction: discord.Interaction, canvas: Optional[str] = None):
