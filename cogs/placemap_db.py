@@ -76,6 +76,20 @@ async def gpl_palette(palette_path: str) -> list[tuple[int, int, int]]:
                     continue
     return palette
 
+async def pixel_counting(user_log_file: str, canvas: str):
+    """Find placement amounts on a canvas"""
+    place, undo, mod = 0, 0, 0
+    with open(user_log_file, 'r') as log_key:
+        for line in log_key:
+            if 'user place' in line:
+                place += 1
+            elif 'user undo' in line:
+                undo += 1  
+            elif 'mod overwrite' in line:
+                mod += 1
+    total_pixels = place - undo
+    return total_pixels, undo, mod
+
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple [int, int]:
     """Find the amount of pixels placed for TPE on a specified canvas using template images. Handles virgin pixels."""
     palette_rgb = await gpl_palette(palette_path)
@@ -159,16 +173,8 @@ async def tpe_pixels_count_user(user_id: int, callback = None) -> dict:
         _, palette_path, _ = config.paths(canvas, user_id, 'normal')
         temp_pattern = f'template/c{canvas}/*.png'
         initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
-        place = 0
-        undo = 0
         try:
-            with open(user_log_file, 'r') as log_key:
-                for line in log_key:
-                    if 'user place' in line:
-                        place += 1
-                    elif 'user undo' in line:
-                        undo += 1  
-            total_pixels = place - undo
+            total_pixels, undo, mod = await pixel_counting(user_log_file, canvas)
             tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path)
             results[canvas] = {
                 'total_pixels': total_pixels,
@@ -206,16 +212,8 @@ async def tpe_pixels_count_canvas(canvas: str, callback = None) -> dict:
         _, palette_path, _ = config.paths(canvas, user_id, 'normal')
         temp_pattern = f'template/c{canvas}/*.png'
         initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
-        place = 0
-        undo = 0
         try:
-            with open(user_log_file, 'r') as log_key:
-                for line in log_key:
-                    if 'user place' in line:
-                        place += 1
-                    elif 'user undo' in line:
-                        undo += 1  
-            total_pixels = place - undo
+            total_pixels, undo, mod = await pixel_counting(user_log_file, canvas)
             tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path)
             results[user_id] = {
                 'total_pixels': total_pixels,
@@ -260,32 +258,20 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         print(f'Subprocess error: {stderr_str}')
         if filter_result.returncode != 0:
             return False, {'error': f'Something went wrong when generating the log file! Ping Temriel.'}
-    
-        place = 0
-        undo = 0
-        mod = 0
+
+        total_pixels, undo, mod = await pixel_counting(user_log_file, canvas)
+        print(f'{total_pixels} pixels placed')
+        print(f'{undo} pixels undone')
+        print(f'{mod} mod overwrites')
         tpe_pixels = 0
         tpe_griefs = 0
-        with open(user_log_file, 'r') as log_file:
-            for line in log_file:
-                if 'user place' in line:
-                    place += 1
-                elif 'user undo' in line:
-                    undo += 1
-                elif 'mod overwrite' in line:
-                    mod += 1
-        total_pixels = place - undo
         if config.tpe(canvas):
             _, palette_path, _ = config.paths(canvas, user.id, mode)
             temp_pattern = f'template/c{canvas}/*.png' # in tib directory
             initial_canvas_path=f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
             tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path)
-        print(f'{total_pixels} pixels placed')
-        print(f'{undo} pixels undone')
-        if config.tpe(canvas):
             print(f'{tpe_pixels} pixels placed for TPE')
             print(f'{tpe_griefs} pixels griefed')
-        print(f'{mod} mod overwrites')
 
         render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
 
@@ -302,6 +288,18 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
             'user_log_file': user_log_file,
             'mode': mode
         }
+        
+async def find_pxls_username(user: Union[discord.User, discord.Member]) -> str:
+    """Find the pxls.space username linked to a Discord user ID."""
+    query = "SELECT username FROM users WHERE user_id = ?"
+    cursor.execute(query, (user.id,))
+    found_user = cursor.fetchone()
+    if found_user and found_user[0]:
+        pxls_username = found_user[0]
+        return pxls_username
+    else:
+        pxls_username = user.global_name or user.name
+        return pxls_username
     
 class PlacemapAltView(discord.ui.View):
     def __init__(self, user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str, timeout: float = 300):
@@ -402,10 +400,10 @@ class placemapDBAdd(discord.ui.Modal, title='Add your log key.'):
         
         user = interaction.user
         query = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)" # the three question marks represents the above "user", "canvas", and "logkey"
-        query2 = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
+        query_user = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
         try:
             cursor.execute(query, (user.id, self.canvas.value, self.key.value)) # we use user.id to store the ID instead of the user string - das bad
-            cursor.execute(query2, (user.id,))
+            cursor.execute(query_user, (user.id,))
             database.commit()
             print(f'Log key added for {user} ({user.id}) on canvas {self.canvas.value}.')
             await interaction.response.send_message(f'Added key for canvas {self.canvas.value}!', ephemeral=True)
@@ -425,7 +423,7 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
 
     async def on_submit(self, interaction: discord.Interaction):
         query = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)"
-        query2 = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
+        query_user = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
         try:
             if interaction.user.id != owner_id:
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
@@ -453,7 +451,7 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                         continue
                     try:
                         cursor.execute(query, (user_id, canvas, key))
-                        cursor.execute(query2, (user_id,))
+                        cursor.execute(query_user, (user_id,))
                         database.commit()
                         success.append(f'c{canvas}')
                     except sqlite3.OperationalError as e:
@@ -464,7 +462,8 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                 if fail:
                     message += f'\nFailed for canvases: {', '.join(fail)}'
                 await interaction.response.send_message(message, ephemeral=True)
-            else:
+                
+            else: # one canvas, multiple users
                 canvas = user_canvases[0]
                 user_ids = user_canvases[1:]
                 if len(keys) != len(user_ids):
@@ -481,7 +480,7 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                         continue
                     try:
                         cursor.execute(query, (int(user_id), canvas, key))
-                        cursor.execute(query2, (user_id,))
+                        cursor.execute(query_user, (user_id,))
                         database.commit()
                         success.append(f'<@{user_id}> ({user_id})')
                     except sqlite3.OperationalError as e:
@@ -496,7 +495,10 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
 
-# DISCORD COMMANDS BELOW
+##############################
+### DISCORD COMMANDS BELOW ###
+##############################
+
 class placemap(commands.Cog):
     def __init__(self, client):
         self.client = client
@@ -550,9 +552,10 @@ class placemap(commands.Cog):
         else:
             await interaction.followup.send(results['error'])
             return
+        pxls_username = await find_pxls_username(user)
         if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
             embed = discord.Embed(
-            title=f'{user} on c{canvas}', 
+            title=f'{pxls_username} on c{canvas}', 
             description=f'**User ID:** {user.id}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE griefed:** {tpe_griefs}\n**Mod overwrites:** {mod}',
             color=discord.Color.purple()
             )
@@ -579,7 +582,7 @@ class placemap(commands.Cog):
                 color=discord.Color.purple()
                 )
             embed.set_author(
-                name=user.global_name or user.name, 
+                name=user.name, 
                 icon_url=user.avatar.url if user.avatar else user.default_avatar.url
                 )
             embed.set_image(url=f'attachment://{filename}')
@@ -629,14 +632,15 @@ class placemap(commands.Cog):
         else:
             await interaction.followup.send(results['error'])
             return
+        pxls_username = await find_pxls_username(user)
         if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
             embed = discord.Embed(
-            title=f'{user} on c{canvas}', 
+            title=f'{pxls_username} on c{canvas}', 
             description=f'**User ID:** {user.id}\n**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE Griefed:** {tpe_griefs}\n**Mod Overwrites:** {mod}',
             color=discord.Color.red()
             )
             embed.set_author(
-                name=user.global_name or user.name, 
+                name=user.name, 
                 icon_url=user.avatar.url if user.avatar else user.default_avatar.url
                 )
             await update_channel.send(embed=embed)
@@ -679,6 +683,7 @@ class placemap(commands.Cog):
                 return
             await interaction.response.defer(ephemeral=True, thinking=True)
             progress = await interaction.followup.send(f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases...', ephemeral=True, wait=True)
+            
             async def callback(canvas, idx, total):
                 """Update the message so you can see THINGS are HAPPENING."""
                 await progress.edit(content=f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases... (c{canvas} {idx}/{total})')

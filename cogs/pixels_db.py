@@ -187,6 +187,72 @@ class db(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print('Main DB cog loaded.')
+
+    @app_commands.command(name='lookup', description='See how many pixels a certain user has placed for us.')
+    @app_commands.describe(pxls_username='Pxls username to look up.')
+    @app_commands.describe(discord_user='Discord username to look up.')
+    async def pixels_db_lookup(self, interaction: discord.Interaction, pxls_username: Optional[str] = None, discord_user: Optional[discord.User] = None):
+        """Find the total pixel count for a user & their rank (defined in config.py)"""
+        who_pxls_username: Optional[str] = None
+        who_discord_user: Optional[Union[discord.User, discord.Member]] = None
+        if pxls_username and discord_user:
+            await interaction.response.send_message('Please provide either a Pxls username or a Discord user, not both.', ephemeral=True)
+            return
+        elif pxls_username:
+            if not re.fullmatch(r'^[a-zA-Z0-9_-]{1,32}$', pxls_username):
+                await interaction.response.send_message('Invalid username', ephemeral=True)
+                return
+            who_pxls_username = pxls_username
+        elif discord_user:
+            who_pxls_username = get_linked_username(discord_user.id)
+            who_discord_user = discord_user
+            if not who_pxls_username:
+                await interaction.response.send_message(f'{discord_user} does not have a linked Pxls username (yet)', ephemeral=True)
+                return
+        else:
+            who_discord_user = interaction.user
+            who_pxls_username = get_linked_username(who_discord_user.id) # "id" is not a known attribute of "None"
+            if not who_pxls_username:
+                await interaction.response.send_message(f'You do not have a linked Pxls username (yet).', ephemeral=True)
+                return
+        stats = get_stats(who_pxls_username)
+        total = stats['total']
+        rank = stats['rank']
+        if who_discord_user:
+            await interaction.response.send_message(f"**{who_discord_user}** (Pxls username: **{who_pxls_username}**) has placed **{total}** pixels for us. They have the rank of **{rank}**.")
+        else:
+            await interaction.response.send_message(f"**{who_pxls_username}** has placed **{total}** pixels for us. They have the rank of **{rank}**.")
+
+    @app_commands.command(name='list', description='See how much people have placed for us.')
+    @app_commands.describe(canvas='Canvas code to filter by (no c).')
+    async def pixels_db_list(self, interaction: discord.Interaction, canvas: Optional[str] = None):
+        """Create a user leaderboard."""
+        start_time = time.time()
+        if canvas:
+            if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+                await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
+                return
+            get_users_all = ("SELECT user, SUM(pixels) as total_all FROM points WHERE canvas=? GROUP BY user ORDER BY total_all DESC")
+            cursor.execute(get_users_all, (canvas,)) # does the above
+        else: 
+            get_users_all = "SELECT user, SUM(pixels) as total_all FROM points GROUP BY user ORDER BY total_all DESC"
+            cursor.execute(get_users_all) # does the above
+        all_pixels = cursor.fetchall() # defines all_pixels to be the thing we got from the database
+        if not all_pixels:
+            await interaction.response.send_message('No pixels or users found.')
+            return # self explanatory but if "all_pixels" is empty it returns this. I love error handling :3  
+        all_pixels = [(str(user), total_all) for user, total_all in all_pixels]
+
+        font_path = "font.ttf" # can be any, as long as it's in the main folder 
+        font_size = 24
+        page_size = 30
+
+        view = LeaderboardView(all_pixels, font_path, font_size, page_size, canvas=canvas)
+        embed, file = view.generate_embed()
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        embed.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {view.current_page}/{view.total_pages}')
+        await interaction.response.send_message(embed=embed, file=file, view=view)
         
     # Discord user related logic
     @app_commands.command(name='link', description='Link a Pxls username with a Discord user (ADMIN ONLY).')
@@ -262,72 +328,6 @@ class db(commands.Cog):
         except Exception as e:
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
-
-    @app_commands.command(name='lookup', description='See how many pixels a certain user has placed for us.')
-    @app_commands.describe(pxls_username='Pxls username to look up.')
-    @app_commands.describe(discord_user='Discord username to look up.')
-    async def pixels_db_lookup(self, interaction: discord.Interaction, pxls_username: Optional[str] = None, discord_user: Optional[discord.User] = None):
-        """Find the total pixel count for a user & their rank (defined in config.py)"""
-        who_pxls_username: Optional[str] = None
-        who_discord_user: Optional[Union[discord.User, discord.Member]] = None
-        if pxls_username and discord_user:
-            await interaction.response.send_message('Please provide either a Pxls username or a Discord user, not both.', ephemeral=True)
-            return
-        elif pxls_username:
-            if not re.fullmatch(r'^[a-zA-Z0-9_-]{1,32}$', pxls_username):
-                await interaction.response.send_message('Invalid username', ephemeral=True)
-                return
-            who_pxls_username = pxls_username
-        elif discord_user:
-            who_pxls_username = get_linked_username(discord_user.id)
-            who_discord_user = discord_user
-            if not who_pxls_username:
-                await interaction.response.send_message(f'{discord_user} does not have a linked Pxls username (yet)', ephemeral=True)
-                return
-        else:
-            who_discord_user = interaction.user
-            who_pxls_username = get_linked_username(who_discord_user.id) # "id" is not a known attribute of "None"
-            if not who_pxls_username:
-                await interaction.response.send_message(f'You do not have a linked Pxls username (yet).', ephemeral=True)
-                return
-        stats = get_stats(who_pxls_username)
-        total = stats['total']
-        rank = stats['rank']
-        if who_discord_user:
-            await interaction.response.send_message(f"**{who_discord_user}** (Pxls username: **{who_pxls_username}**) has placed **{total}** pixels for us. They have the rank of **{rank}**.")
-        else:
-            await interaction.response.send_message(f"**{who_pxls_username}** has placed **{total}** pixels for us. They have the rank of **{rank}**.")
-
-    @app_commands.command(name='list', description='See how much people have placed for us.')
-    @app_commands.describe(canvas='Canvas code to filter by (no c).')
-    async def pixels_db_list(self, interaction: discord.Interaction, canvas: Optional[str] = None):
-        """Create a user leaderboard."""
-        start_time = time.time()
-        if canvas:
-            if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
-                await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
-                return
-            get_users_all = ("SELECT user, SUM(pixels) as total_all FROM points WHERE canvas=? GROUP BY user ORDER BY total_all DESC")
-            cursor.execute(get_users_all, (canvas,)) # does the above
-        else: 
-            get_users_all = "SELECT user, SUM(pixels) as total_all FROM points GROUP BY user ORDER BY total_all DESC"
-            cursor.execute(get_users_all) # does the above
-        all_pixels = cursor.fetchall() # defines all_pixels to be the thing we got from the database
-        if not all_pixels:
-            await interaction.response.send_message('No pixels or users found.')
-            return # self explanatory but if "all_pixels" is empty it returns this. I love error handling :3  
-        all_pixels = [(str(user), total_all) for user, total_all in all_pixels]
-
-        font_path = "font.ttf" # can be any, as long as it's in the main folder 
-        font_size = 24
-        page_size = 30
-
-        view = LeaderboardView(all_pixels, font_path, font_size, page_size, canvas=canvas)
-        embed, file = view.generate_embed()
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        embed.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {view.current_page}/{view.total_pages}')
-        await interaction.response.send_message(embed=embed, file=file, view=view)
 
 async def setup(client):
     await client.add_cog(db(client))
