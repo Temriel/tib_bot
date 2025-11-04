@@ -156,12 +156,19 @@ class LeaderboardView(discord.ui.View):
         embed.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {self.current_page}/{self.total_pages}')
         await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
 
-def get_linked_username(user_id: int) -> Optional[str]:
+def get_linked_discord_username(user_id: int) -> Optional[str]:
     """Get the linked Pxls username for a given Discord user ID."""
     query = "SELECT username FROM users WHERE user_id = ?"
     cursor.execute(query, (user_id,))
     result = cursor.fetchone()
     return result[0] if result else None
+
+def get_linked_pxls_username(pxls_username: str) -> Optional[int]:
+    """Get the linked Discord user for a given Pxls username."""
+    query = "SELECT user_id FROM users WHERE username = ?"
+    cursor.execute(query, (pxls_username,))
+    result = cursor.fetchone()
+    return result [0] if result else None
 
 def get_stats(pxls_username: str) -> dict:
     """Get pixel stats for a given Pxls username."""
@@ -195,23 +202,33 @@ class db(commands.Cog):
         """Find the total pixel count for a user & their rank (defined in config.py)"""
         who_pxls_username: Optional[str] = None
         who_discord_user: Optional[Union[discord.User, discord.Member]] = None
+        # both provided 
         if pxls_username and discord_user:
             await interaction.response.send_message('Please provide either a Pxls username or a Discord user, not both.', ephemeral=True)
             return
+        # only pxls username, finds discord if any 
         elif pxls_username:
             if not re.fullmatch(r'^[a-zA-Z0-9_-]{1,32}$', pxls_username):
                 await interaction.response.send_message('Invalid username', ephemeral=True)
                 return
             who_pxls_username = pxls_username
+            linked_discord = get_linked_pxls_username(who_pxls_username)
+            print(linked_discord)
+            if not linked_discord:
+                who_discord_user = None
+            else: 
+                who_discord_user = await interaction.client.fetch_user(linked_discord)
+        # only discord user, errors if no pxls username
         elif discord_user:
-            who_pxls_username = get_linked_username(discord_user.id)
+            who_pxls_username = get_linked_discord_username(discord_user.id)
             who_discord_user = discord_user
             if not who_pxls_username:
                 await interaction.response.send_message(f'{discord_user} does not have a linked Pxls username (yet)', ephemeral=True)
                 return
+        # no arguments provided, uses interaction user (errors again if no pxls username)
         else:
             who_discord_user = interaction.user
-            who_pxls_username = get_linked_username(who_discord_user.id) # "id" is not a known attribute of "None"
+            who_pxls_username = get_linked_discord_username(who_discord_user.id)
             if not who_pxls_username:
                 await interaction.response.send_message(f'You do not have a linked Pxls username (yet).', ephemeral=True)
                 return

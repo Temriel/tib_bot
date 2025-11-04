@@ -102,6 +102,8 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
         return 0, 0
     tpe_place = {}
     tpe_grief = {}
+    # this entire block needs to be fixed at some point because it is Kind Of Silly
+    # esp. with the amount of indentation
     with open (user_log_file, newline='') as csvfile:
         reader = csv.reader(csvfile, delimiter='\t')
         for row in reader:
@@ -174,6 +176,7 @@ async def tpe_pixels_count_user(user_id: int, callback = None) -> dict:
         temp_pattern = f'template/c{canvas}/*.png'
         initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
         try:
+            # even though we don't use mod, it throws an error if we only define 2 variables
             total_pixels, undo, mod = await pixel_counting(user_log_file, canvas)
             tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path)
             results[canvas] = {
