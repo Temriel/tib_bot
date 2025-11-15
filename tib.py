@@ -10,12 +10,10 @@ import importlib
 load_dotenv()
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
-
 intents = discord.Intents.none()
 intents.guilds = True
 bot = commands.Bot(command_prefix='>', intents=intents)
 tree = bot.tree
-
 owner_id = config.owner()
 
 @bot.event
@@ -78,6 +76,7 @@ async def main():
     await load()
 
 asyncio.run(main())
+print('Starting bot...')
 token = os.getenv("bot_token")
 if not token:
     raise ValueError("No token found in .env file.")

@@ -230,7 +230,7 @@ async def tpe_pixels_count_canvas(canvas: str, callback = None) -> dict:
     return results
 
 async def generate_placemap(user: Union[discord.User, discord.Member], canvas: str) -> tuple[bool, dict]:
-    """Helper function to generate a placemap"""
+    """Helper function to generate a placemap. Returns various other user logkey stats as well."""
     async with semaphore:
         get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
         ple_dir = config.pxlslog_explorer_dir
@@ -245,7 +245,11 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
             return False, {'error': f'No log key found for this canvas.'}
         
         user_key = user_key[0]
-        if not re.fullmatch(r'[a-z0-9]{512}', user_key):
+        if isinstance(user_key, int):
+            return False, {'error': f'Your key is just a bunch of numbers smh.'}
+        
+        user_key = str(user_key)
+        if not re.fullmatch(r'(?=.*[a-z])[a-z0-9]{512}', user_key):
             return False, {'error': f'Invalid format! A log key can only contain a-z, and 0-9.'}
 
         user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
@@ -260,7 +264,15 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         print(f'Subprocess output: {stdout_str}')
         print(f'Subprocess error: {stderr_str}')
         if filter_result.returncode != 0:
-            return False, {'error': f'Something went wrong when generating the log file! Ping Temriel.'}
+            return False, {'error': f'Something went wrong when filtering the log file! Ping Temriel.'}
+        
+        try:
+            if os.path.getsize(user_log_file) == 0:
+                return False, {'error': f'Invalid log key for c{canvas}. Wrong key?'}
+        except FileNotFoundError:
+            return False, {'error': f'Log file not found after filtering. Ping Temriel.'}
+        except Exception as e:
+            return False, {'error': f'An error occurred while accessing the log file: {e}'}
 
         total_pixels, undo, mod = await pixel_counting(user_log_file, canvas)
         print(f'{total_pixels} pixels placed')
@@ -397,7 +409,7 @@ class placemapDBAdd(discord.ui.Modal, title='Add your log key.'):
         if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', self.canvas.value):
             await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
             return
-        if not re.fullmatch(r'[a-z0-9]{512}', self.key.value):
+        if not re.fullmatch(r'(?=.*[a-z])[a-z0-9]{512}', self.key.value):
             await interaction.response.send_message('Invalid format! A log key can only contain a-z and 0-9.', ephemeral=True)
             return
         
@@ -449,7 +461,7 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                     if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
                         fail.append((f'c{canvas}, Invalid canvas format'))
                         continue
-                    if not re.fullmatch(r'[a-z0-9]{512}', key):
+                    if not re.fullmatch(r'(?=.*[a-z])[a-z0-9]{512}', key):
                         fail.append((f'c{canvas}, Invalid key format'))
                         continue
                     try:
@@ -478,7 +490,7 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                     if not re.fullmatch(r'\d{17,}', user_id):
                         fail.append((f'<@{user_id}> ({user_id}), Invalid user ID format'))
                         continue
-                    if not re.fullmatch(r'[a-z0-9]{512}', key):
+                    if not re.fullmatch(r'(?=.*[a-z])[a-z0-9]{512}', key):
                         fail.append((f'<@{user_id}> ({user_id}), Invalid key format'))
                         continue
                     try:

@@ -200,8 +200,8 @@ class db(commands.Cog):
     @app_commands.describe(discord_user='Discord username to look up.')
     async def pixels_db_lookup(self, interaction: discord.Interaction, pxls_username: Optional[str] = None, discord_user: Optional[discord.User] = None):
         """Find the total pixel count for a user & their rank (defined in config.py)"""
-        who_pxls_username: Optional[str] = None
-        who_discord_user: Optional[Union[discord.User, discord.Member]] = None
+        internal_pxls_username: Optional[str] = None # what exists in the db
+        internal_discord_user: Optional[Union[discord.User, discord.Member]] = None # same here
         # both provided 
         if pxls_username and discord_user:
             await interaction.response.send_message('Please provide either a Pxls username or a Discord user, not both.', ephemeral=True)
@@ -211,34 +211,33 @@ class db(commands.Cog):
             if not re.fullmatch(r'^[a-zA-Z0-9_-]{1,32}$', pxls_username):
                 await interaction.response.send_message('Invalid username', ephemeral=True)
                 return
-            who_pxls_username = pxls_username
-            linked_discord = get_linked_pxls_username(who_pxls_username)
-            print(linked_discord)
+            internal_pxls_username = pxls_username
+            linked_discord = get_linked_pxls_username(internal_pxls_username)
             if not linked_discord:
-                who_discord_user = None
+                internal_discord_user = None
             else: 
-                who_discord_user = await interaction.client.fetch_user(linked_discord)
+                internal_discord_user = await interaction.client.fetch_user(linked_discord)
         # only discord user, errors if no pxls username
         elif discord_user:
-            who_pxls_username = get_linked_discord_username(discord_user.id)
-            who_discord_user = discord_user
-            if not who_pxls_username:
+            internal_pxls_username = get_linked_discord_username(discord_user.id)
+            internal_discord_user = discord_user
+            if not internal_pxls_username:
                 await interaction.response.send_message(f'{discord_user} does not have a linked Pxls username (yet)', ephemeral=True)
                 return
         # no arguments provided, uses interaction user (errors again if no pxls username)
         else:
-            who_discord_user = interaction.user
-            who_pxls_username = get_linked_discord_username(who_discord_user.id)
-            if not who_pxls_username:
+            internal_discord_user = interaction.user
+            internal_pxls_username = get_linked_discord_username(internal_discord_user.id)
+            if not internal_pxls_username:
                 await interaction.response.send_message(f'You do not have a linked Pxls username (yet).', ephemeral=True)
                 return
-        stats = get_stats(who_pxls_username)
+        stats = get_stats(internal_pxls_username)
         total = stats['total']
         rank = stats['rank']
-        if who_discord_user:
-            await interaction.response.send_message(f"**{who_discord_user}** (Pxls username: **{who_pxls_username}**) has placed **{total}** pixels for us. They have the rank of **{rank}**.")
+        if internal_discord_user:
+            await interaction.response.send_message(f"**{internal_discord_user}** (Pxls username: **{internal_pxls_username}**) has placed **{total}** pixels for us. They have the rank of **{rank}**.")
         else:
-            await interaction.response.send_message(f"**{who_pxls_username}** has placed **{total}** pixels for us. They have the rank of **{rank}**.")
+            await interaction.response.send_message(f"**{internal_pxls_username}** has placed **{total}** pixels for us. They have the rank of **{rank}**.")
 
     @app_commands.command(name='list', description='See how much people have placed for us.')
     @app_commands.describe(canvas='Canvas code to filter by (no c).')
