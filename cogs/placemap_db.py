@@ -41,23 +41,6 @@ async def render(user: Union[discord.User, discord.Member], canvas: str, mode: s
     filename = f'c{canvas}_{mode}_{user.id}.png'
     return render_result, filename, output_path
 
-async def most_active(user_log_file: str) -> tuple[tuple[int, int], int]:
-    """Find the most active pixel using a user log file."""
-    pixel_counts = {}
-    with open (user_log_file, newline='') as csvfile:
-        reader = csv.reader(csvfile, delimiter='\t')
-        for row in reader:
-            if len(row) >=6:
-                x = row[2].strip()
-                y = row[3].strip()
-                key = (x, y)
-                pixel_counts[key] = pixel_counts.get(key, 0) + 1
-    if pixel_counts:
-        most_active, count = max(pixel_counts.items(), key=lambda item: item[1])
-        return most_active, count
-    else: 
-        return (0, 0), 0
-    
 async def gpl_palette(palette_path: str) -> list[tuple[int, int, int]]:
     """Find palette RGB from a .gpl file."""
     palette = []
@@ -76,6 +59,25 @@ async def gpl_palette(palette_path: str) -> list[tuple[int, int, int]]:
                     continue
     return palette
 
+# Placemap handling
+
+async def most_active(user_log_file: str) -> tuple[tuple[int, int], int]:
+    """Find the most active pixel using a user log file."""
+    pixel_counts = {}
+    with open (user_log_file, newline='') as csvfile:
+        reader = csv.reader(csvfile, delimiter='\t')
+        for row in reader:
+            if len(row) >=6:
+                x = row[2].strip()
+                y = row[3].strip()
+                key = (x, y)
+                pixel_counts[key] = pixel_counts.get(key, 0) + 1
+    if pixel_counts:
+        most_active, count = max(pixel_counts.items(), key=lambda item: item[1])
+        return most_active, count
+    else: 
+        return (0, 0), 0
+
 async def pixel_counting(user_log_file: str, canvas: str):
     """Find placement amounts on a canvas"""
     place, undo, mod = 0, 0, 0
@@ -89,6 +91,48 @@ async def pixel_counting(user_log_file: str, canvas: str):
                 mod += 1
     total_pixels = place - undo
     return total_pixels, undo, mod
+
+async def survival(user_log_file: str, final_canvas_path: str, palette: list[tuple[int, int, int]]):
+    """Find survival stats on a canvas"""
+    def process_stats():
+        final_state = {}
+        replaced_user = 0
+        try:
+            with open (user_log_file, newline='') as csvfile:
+                reader = csv.reader(csvfile, delimiter='\t')
+                for row in reader:
+                    if len(row) >=6:
+                        x, y, index, action = int(row[2].strip()), int(row[3].strip()), int(row[4].strip()), row[5].strip()
+                        coord = (x, y)
+                        if action == 'user place':
+                            if (x, y) in final_state:
+                                replaced_user += 1
+                            final_state[coord] = index
+                        elif action == 'user undo':
+                            final_state.pop(coord, None)
+        except FileNotFoundError as e:
+            print(f'{e}')
+            return 0
+        
+        survived = 0
+        try:
+            with Image.open(final_canvas_path).convert('RGB') as final_canvas_image:
+                width, height = final_canvas_image.size
+                for coord, index in final_state.items():
+                    x, y = coord
+                    if x >= width or y >= height:
+                        continue
+                    if index >= len(palette):
+                        continue
+                    placed_pixel = palette[index]
+                    final_pixel = final_canvas_image.getpixel(coord) # error here
+                    if final_pixel == placed_pixel:
+                        survived += 1
+        except FileNotFoundError as e:
+            print(f'{e}')
+            return 0
+        return survived
+    return await asyncio.to_thread(process_stats)
 
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple [int, int]:
     """Find the amount of pixels placed for TPE on a specified canvas using template images. Handles virgin pixels."""
@@ -232,11 +276,13 @@ async def tpe_pixels_count_canvas(canvas: str, callback = None) -> dict:
 async def generate_placemap(user: Union[discord.User, discord.Member], canvas: str) -> tuple[bool, dict]:
     """Helper function to generate a placemap. Returns various other user logkey stats as well."""
     async with semaphore:
+        filter_start_time = time.time()
         get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
         ple_dir = config.pxlslog_explorer_dir
         cursor.execute(get_key, (canvas, user.id)) # does the above
         user_key = cursor.fetchone()
         mode = 'normal'
+        _, palette_path, _ = config.paths(canvas, user.id, mode)
 
         if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
             return False, {'error': f'Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.'}
@@ -265,7 +311,6 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         print(f'Subprocess error: {stderr_str}')
         if filter_result.returncode != 0:
             return False, {'error': f'Something went wrong when filtering the log file! Ping Temriel.'}
-        
         try:
             if os.path.getsize(user_log_file) == 0:
                 return False, {'error': f'Invalid log key for c{canvas}. Wrong key?'}
@@ -273,35 +318,47 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
             return False, {'error': f'Log file not found after filtering. Ping Temriel.'}
         except Exception as e:
             return False, {'error': f'An error occurred while accessing the log file: {e}'}
-
+        filter_end_time = time.time()
+        print(f'filter.exe took {filter_end_time - filter_start_time:.2f}s')
         total_pixels, undo, mod = await pixel_counting(user_log_file, canvas)
+        survive_start_time = time.time()
+        survived = await survival(user_log_file, f'{ple_dir}/pxls-final-canvas/canvas-{canvas}-final.png', await gpl_palette(palette_path))
+        survived_perc = (survived / total_pixels * 100) if total_pixels > 0 else 0
+        survived_perc = f'{survived_perc:.2f}'
+        survive_end_time = time.time()
         print(f'{total_pixels} pixels placed')
         print(f'{undo} pixels undone')
         print(f'{mod} mod overwrites')
+        print(f'{survived} ({survived_perc}%) pixels survived ({survive_end_time - survive_start_time:.2f}s)')
         tpe_pixels = 0
         tpe_griefs = 0
         if config.tpe(canvas):
-            _, palette_path, _ = config.paths(canvas, user.id, mode)
+            tpe_start_time = time.time()
             temp_pattern = f'template/c{canvas}/*.png' # in tib directory
             initial_canvas_path=f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
             tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path, initial_canvas_path)
-            print(f'{tpe_pixels} pixels placed for TPE')
+            tpe_end_time = time.time()
+            print(f'{tpe_pixels} pixels placed for TPE (took {tpe_end_time - tpe_start_time:.2f}s)')
             print(f'{tpe_griefs} pixels griefed')
 
+        render_start_time = time.time()
         render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
-
+        render_end_time = time.time()
+        print(f'render.exe took {render_end_time - render_start_time:.2f}s')
         if render_result.returncode != 0:
             return False, {'error': f'Something went wrong when generating the placemap! Ping Temriel.'}
         return True, {
-            'total_pixels': total_pixels,
+            'total_pixels': total_pixels, # placed - undo
             'undo': undo,
             'mod': mod,
-            'tpe_pixels': tpe_pixels,
+            'survived': survived, # pixels that are the same as the "final" state of the canvas
+            'survived_perc': survived_perc, # above but % form
+            'tpe_pixels': tpe_pixels, # for tpe - griefs
             'tpe_griefs': tpe_griefs,
             'filename': filename,
             'output_path': output_path,
             'user_log_file': user_log_file,
-            'mode': mode
+            'mode': mode # defaults to normal
         }
         
 async def find_pxls_username(user: Union[discord.User, discord.Member]) -> str:
@@ -559,6 +616,8 @@ class placemap(commands.Cog):
             total_pixels = results.get("total_pixels", 0)
             undo = results.get("undo", 0)
             mod = results.get("mod", 0)
+            survived = results.get("survived", 0)
+            survived_perc = results.get("survived_perc", 0)
             tpe_pixels = results.get("tpe_pixels", 0)
             tpe_griefs = results.get("tpe_griefs", 0)
             filename = results.get("filename", 0)
@@ -568,10 +627,11 @@ class placemap(commands.Cog):
             await interaction.followup.send(results['error'])
             return
         pxls_username = await find_pxls_username(user)
+
         if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
             embed = discord.Embed(
             title=f'{pxls_username} on c{canvas}', 
-            description=f'**User ID:** {user.id}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE griefed:** {tpe_griefs}\n**Mod overwrites:** {mod}',
+            description=f'**User ID:** {user.id}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE griefed:** {tpe_griefs}\n**Mod overwrites:** {mod}\n**Surviving pixels:** {survived} ({survived_perc}%)',
             color=discord.Color.purple()
             )
             embed.set_author(
@@ -583,9 +643,10 @@ class placemap(commands.Cog):
         try: 
             end_time = time.time()
             elapsed_time = end_time - start_time
+            print(f'/logkey generate took {elapsed_time:.2f}s')
             file = discord.File(results["output_path"], filename=results["filename"])
             (active_x, active_y), active_count = await most_active(results["user_log_file"])
-            description=f'**Pixels Placed:** {results["total_pixels"]}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels'
+            description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels\n**Surviving Pixels:** {survived} ({survived_perc}%)'
             if config.tpe(canvas):
                 description += f'\n**Pixels for TPE:** {results["tpe_pixels"]}'
                 description += f'\n**Pixels griefed:** {results["tpe_griefs"]}'
@@ -639,6 +700,8 @@ class placemap(commands.Cog):
             total_pixels = results.get("total_pixels", 0)
             undo = results.get("undo", 0)
             mod = results.get("mod", 0)
+            survived = results.get("survival", 0)
+            survived_perc = results.get("survived_perc", 0)
             tpe_pixels = results.get("tpe_pixels", 0)
             tpe_griefs = results.get("tpe_griefs", 0)
             filename = results.get("filename", 0)
@@ -651,7 +714,7 @@ class placemap(commands.Cog):
         if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
             embed = discord.Embed(
             title=f'{pxls_username} on c{canvas}', 
-            description=f'**User ID:** {user.id}\n**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE Griefed:** {tpe_griefs}\n**Mod Overwrites:** {mod}',
+            description=f'**User ID:** {user.id}\n**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE Griefed:** {tpe_griefs}\n**Mod Overwrites:** {mod}\n**Surviving Pixels:** {survived} ({survived_perc}%)',
             color=discord.Color.red()
             )
             embed.set_author(
@@ -663,9 +726,10 @@ class placemap(commands.Cog):
         try: 
             end_time = time.time()
             elapsed_time = end_time - start_time
+            print(f'/logkey force-generate took {elapsed_time:.2f}s')
             file = discord.File(results["output_path"], filename=results["filename"])
             (active_x, active_y), active_count = await most_active(results["user_log_file"])
-            description=f'**Pixels Placed:** {results["total_pixels"]}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels'
+            description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels\n**Surviving Pixels:** {survived} ({survived_perc}%)'
             if config.tpe(canvas):
                 description += f'\n**Pixels for TPE:** {results["tpe_pixels"]}'
                 description += f'\n**Pixels Griefed:** {results["tpe_griefs"]}'
