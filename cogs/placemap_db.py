@@ -137,61 +137,80 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple [int, int]:
     """Find the amount of pixels placed for TPE on a specified canvas using template images. Handles virgin pixels."""
     palette_rgb = await gpl_palette(palette_path)
-    template_path = glob.glob(temp_pattern)
+    if not palette_rgb:
+        return 0, 0
+    template_images = []
+    template_map = []
     try:
-        template_images = [Image.open(path).convert('RGBA') for path in template_path]
         initial_canvas_image = Image.open(initial_canvas_path).convert('RGB')
+        initial_canvas = initial_canvas_image.load()
+        for path in glob.glob(temp_pattern):
+            img = Image.open(path).convert('RGBA')
+            template_images.append(img)
+            template_map.append(img.load())
     except FileNotFoundError as e:
         print(f'{e}')
         return 0, 0
+    if initial_canvas == None:
+        return 0, 0
     tpe_place = {}
     tpe_grief = {}
-    # this entire block needs to be fixed at some point because it is Kind Of Silly
-    # esp. with the amount of indentation
     with open (user_log_file, newline='') as csvfile:
         reader = csv.reader(csvfile, delimiter='\t')
         for row in reader:
+            if len(row) < 6:    
+                continue
             try:
-                if len(row) < 6:
-                    continue
                 x = int(row[2].strip())
                 y = int(row[3].strip())
-                index = int(row[4].strip())
-                action = row[5].strip()
                 coord = (x, y)
-
-                if action == 'user place':
-                    placed_rgb = palette_rgb[index]
-                    is_correct = False
-                    is_virgin = False
-                    present = False
-                    for tpe_image in template_images:
-                        value = tpe_image.getpixel(coord)
-                        if isinstance(value, tuple) and len(value) == 4:
-                            r, g, b, a = value
-                        else:
-                            continue
-                        if a == 0:
-                            continue
-                        present = True
-                        target_rgb = (r, g, b)
-                        initial_canvas_rgb = initial_canvas_image.getpixel(coord)
-                        if placed_rgb == target_rgb:
-                            is_correct = True
-                            break
-                        if target_rgb == initial_canvas_rgb:
-                            is_virgin = True
-                    if is_correct or is_virgin:
-                        tpe_place[coord] = tpe_place.get(coord, 0) + 1
-                        tpe_grief.pop(coord, None)
-                    elif present and not is_correct:
-                        tpe_grief[coord] = tpe_grief.get(coord, 0) + 1
-                        tpe_place.pop(coord, None)
-                elif action == 'user undo':
-                    tpe_place.pop(coord, None)
-                    tpe_grief.pop(coord, None)
-            except (ValueError, IndexError, OSError):
+                index = int(row[4].strip())
+                placed_rgb = palette_rgb[index]
+                action = row[5].strip()
+            except (ValueError, IndexError):
                 continue
+            if action == 'user undo':
+                if coord in tpe_place:
+                    tpe_place[coord] -= 1
+                    if tpe_place[coord] <= 0:
+                        del tpe_place[coord]
+                if coord in tpe_grief:
+                    tpe_grief[coord] -= 1
+                    if tpe_grief[coord] <= 0:
+                        del tpe_grief[coord]
+            if action != 'user place':
+                continue
+            is_correct = False
+            is_virgin = False
+            present = False
+            try:
+                initial_canvas_rgb = initial_canvas[x, y]
+            except IndexError:
+                continue
+            for tpe_image in template_map:
+                try:
+                    tpe_image_rgb = tpe_image[x, y]
+                except IndexError:
+                    continue
+                # palette check
+                if not isinstance(tpe_image_rgb, (tuple, list)) or len(tpe_image_rgb) < 4:
+                    continue
+                r, g, b, a = tpe_image_rgb
+                if a == 0:
+                    continue
+                present = True
+                target_rgb = (r, g, b)
+                if placed_rgb == target_rgb: # correct pixel
+                    is_correct = True
+                    break
+                if target_rgb == initial_canvas_rgb: # virgin pixel
+                    is_virgin = True
+            if is_correct or is_virgin:
+                tpe_place[coord] = tpe_place.get(coord, 0) + 1
+                tpe_grief.pop(coord, None)
+            elif present and not is_correct:
+                tpe_grief[coord] = tpe_grief.get(coord, 0) + 1
+                tpe_place.pop(coord, None)
     tpe_pixels = sum(tpe_place.values())
     tpe_griefs = sum(tpe_grief.values())
     return tpe_pixels - tpe_griefs, tpe_griefs
