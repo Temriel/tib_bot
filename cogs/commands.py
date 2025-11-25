@@ -4,6 +4,13 @@ from discord.ext import commands
 import config
 from typing import Optional
 import re
+import sqlite3
+
+owner_id = config.owner()
+
+database = sqlite3.connect('database.db')
+cursor = database.cursor()
+database.execute('CREATE TABLE IF NOT EXISTS notif (user_id INT PRIMARY KEY, status BOOLEAN, FOREIGN KEY (user_id) REFERENCES users(user_id))')
 
 COG_CATEGORIES = {
     'db': 'TPE Leaderboards',
@@ -102,6 +109,58 @@ class commander(commands.Cog):
             else: 
                 await interaction.followup.send(f'No log files available.', ephemeral=True)
                 print(f'An error occurred: {e}')
+                
+    @app_commands.command(name='notify-me', description='Sign up for DM notifications when Tib is updated with new canvases (run again to unsubscribe).')
+    async def notfications(self, interaction: discord.Interaction):
+        """Command to add users to DB for DM notifcations"""
+        try:
+            cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (interaction.user.id,))
+        except Exception as e:
+            return await interaction.response.send_message(f'An error occurred while signing you up: {e}', ephemeral=True)
+        cursor.execute('SELECT status FROM notif WHERE user_id = ?', (interaction.user.id,))
+        result = cursor.fetchone()
+        if result is None:
+            cursor.execute('INSERT INTO notif (user_id, status) VALUES (?, ?)', (interaction.user.id, 1))
+            database.commit()
+            await interaction.response.send_message('You have been signed up for notifications!', ephemeral=True)
+            print(f'{interaction.user} ({interaction.user.id}) signed up for notifications.')
+        else:
+            if result[0] == 1:
+                cursor.execute('UPDATE notif SET status = 0 WHERE user_id = ?', (interaction.user.id,))
+                database.commit()
+                await interaction.response.send_message('You have been unsubscribed from notifications.', ephemeral=True)
+                print(f'{interaction.user} ({interaction.user.id}) unsubscribed from notifications.')
+            if result[0] == 0:
+                cursor.execute('UPDATE notif SET status = 1 WHERE user_id = ?', (interaction.user.id,))
+                database.commit()
+                await interaction.response.send_message('You have been re-subscribed to notifications!', ephemeral=True)
+                print(f'{interaction.user} ({interaction.user.id}) re-subscribed to notifications.')
+
+    @app_commands.command(name='notfy-users', description='Notify all users who signed up for notifications about a new canvas (ADMIN ONLY).')
+    async def notifications_admin(self, interaction: discord.Interaction):
+        """Notify all users who signed up for notifications about a new canvas (ADMIN ONLY)."""
+        if interaction.user.id != owner_id:
+            await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=False,thinking=True)
+        cursor.execute('SELECT user_id FROM notif WHERE status = 1')
+        users_to_notify = cursor.fetchall()
+        notified_count = 0
+        for (user_id,) in users_to_notify:
+            user = self.client.get_user(user_id)
+            if user is None:
+                try:
+                    user = await self.client.fetch_user(user_id)
+                except Exception as e:
+                    print(f'Failed to fetch user {user_id}: {e}')
+                    continue
+            if user:
+                try:
+                    await user.send('Tib now has the latest canvas in its DB, you can now create placemaps as you wish.')
+                    notified_count += 1
+                except Exception as e:
+                    print(f'Failed to notify user {user_id}: {e}')
+        await interaction.followup.send(f'Notified {notified_count} users.', ephemeral=True)
 
 async def setup(client):
     await client.add_cog(commander(client))

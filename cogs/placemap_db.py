@@ -664,7 +664,10 @@ class placemap(commands.Cog):
             elapsed_time = end_time - start_time
             print(f'/logkey generate took {elapsed_time:.2f}s')
             file = discord.File(results["output_path"], filename=results["filename"])
+            active_start_time = time.time()
             (active_x, active_y), active_count = await most_active(results["user_log_file"])
+            active_end_time = time.time()
+            print(f'({active_x}, {active_y}) with {active_count} pixels ({active_end_time - active_start_time:.2f}s)')
             description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels\n**Surviving Pixels:** {survived} ({survived_perc}%)'
             if config.tpe(canvas):
                 description += f'\n**Pixels for TPE:** {results["tpe_pixels"]}'
@@ -719,7 +722,7 @@ class placemap(commands.Cog):
             total_pixels = results.get("total_pixels", 0)
             undo = results.get("undo", 0)
             mod = results.get("mod", 0)
-            survived = results.get("survival", 0)
+            survived = results.get("survived", 0)
             survived_perc = results.get("survived_perc", 0)
             tpe_pixels = results.get("tpe_pixels", 0)
             tpe_griefs = results.get("tpe_griefs", 0)
@@ -747,7 +750,10 @@ class placemap(commands.Cog):
             elapsed_time = end_time - start_time
             print(f'/logkey force-generate took {elapsed_time:.2f}s')
             file = discord.File(results["output_path"], filename=results["filename"])
+            active_start_time = time.time()
             (active_x, active_y), active_count = await most_active(results["user_log_file"])
+            active_end_time = time.time()
+            print(f'({active_x}, {active_y}) with {active_count} pixels ({active_end_time - active_start_time:.2f}s)')
             description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels\n**Surviving Pixels:** {survived} ({survived_perc}%)'
             if config.tpe(canvas):
                 description += f'\n**Pixels for TPE:** {results["tpe_pixels"]}'
