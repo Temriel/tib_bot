@@ -1,16 +1,12 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import config
+import utils.config as config
 from typing import Optional
 import re
-import sqlite3
+from utils.db_utils import cursor, database
 
 owner_id = config.owner()
-
-database = sqlite3.connect('database.db')
-cursor = database.cursor()
-database.execute('CREATE TABLE IF NOT EXISTS notif (user_id INT PRIMARY KEY, status BOOLEAN, FOREIGN KEY (user_id) REFERENCES users(user_id))')
 
 COG_CATEGORIES = {
     'db': 'TPE Leaderboards',
@@ -53,6 +49,8 @@ class commander(commands.Cog):
         categories = {}
         for cog in self.client.cogs.values():
             cog_name = cog.__class__.__name__.lower()
+            if cog_name == 'admin':
+                continue
             category = COG_CATEGORIES.get(cog_name, cog.__class__.__name__)
             commands = getattr(cog, '__cog_app_commands__', [])
             for command in bot_commands(commands):
@@ -135,32 +133,6 @@ class commander(commands.Cog):
                 database.commit()
                 await interaction.response.send_message('You have been re-subscribed to notifications!', ephemeral=True)
                 print(f'{interaction.user} ({interaction.user.id}) re-subscribed to notifications.')
-
-    @app_commands.command(name='notfy-users', description='Notify all users who signed up for notifications about a new canvas (ADMIN ONLY).')
-    async def notifications_admin(self, interaction: discord.Interaction):
-        """Notify all users who signed up for notifications about a new canvas (ADMIN ONLY)."""
-        if interaction.user.id != owner_id:
-            await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=False,thinking=True)
-        cursor.execute('SELECT user_id FROM notif WHERE status = 1')
-        users_to_notify = cursor.fetchall()
-        notified_count = 0
-        for (user_id,) in users_to_notify:
-            user = self.client.get_user(user_id)
-            if user is None:
-                try:
-                    user = await self.client.fetch_user(user_id)
-                except Exception as e:
-                    print(f'Failed to fetch user {user_id}: {e}')
-                    continue
-            if user:
-                try:
-                    await user.send('Tib now has the latest canvas in its DB, you can now create placemaps as you wish.')
-                    notified_count += 1
-                except Exception as e:
-                    print(f'Failed to notify user {user_id}: {e}')
-        await interaction.followup.send(f'Notified {notified_count} users.', ephemeral=True)
 
 async def setup(client):
     await client.add_cog(commander(client))

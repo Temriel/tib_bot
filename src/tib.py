@@ -4,7 +4,8 @@ from discord.ext import commands
 import os
 from dotenv import load_dotenv
 import logging
-import config
+import utils.config as config
+import utils.db_utils as db_utils
 import importlib
 
 load_dotenv()
@@ -47,6 +48,20 @@ async def sync(interaction: discord.Interaction):
     await interaction.response.send_message('Synced commands.', ephemeral=True)
     print(f'Synced {len(fmt)} commands globally.')
 
+@tree.command(name='sync-admin', description='Sync admin commands (ADMIN ONLY)')
+async def sync_admin(interaction: discord.Interaction):
+    """Sync admin commands to the admin server only."""
+    fmt = []
+    if interaction.user.id != owner_id:
+        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+        return
+    guild_list = [config.admin_server(), config.dev_server()]
+    for guild_id in guild_list:
+        guild_object = discord.Object(id=guild_id)
+        fmt = await tree.sync(guild=guild_object)
+    await interaction.response.send_message('Synced admin commands.', ephemeral=True)
+    print(f'Synced {len(fmt)} admin commands to admin server.')
+
 @tree.command(name='reload-cogs', description='Reload the cogs (ADMIN ONLY)')
 async def reload_cogs(interaction: discord.Interaction):
     """Reload all cogs present within the bot. They can't be used otherwise (esp if you add new code)"""
@@ -55,6 +70,7 @@ async def reload_cogs(interaction: discord.Interaction):
         return
     reload = []
     importlib.reload(config)
+    importlib.reload(db_utils)
     # reload.append(f'Config successfully reloaded.') # doesn't seem to work
     print('config successfully reloaded.')
     for filename in os.listdir('./cogs'):

@@ -16,6 +16,18 @@ def update_channel():
     if update_channel_id is None:
         raise ValueError("update_channel_id not set!")
     return int(update_channel_id)
+def admin_server():
+    """Guild for admin commands."""
+    admin_server_id = os.getenv("admin_server_id")
+    if admin_server_id is None:
+        raise ValueError("admin_server_id not set!")
+    return int(admin_server_id)
+def dev_server():
+    """Guild for development testing."""
+    dev_server_id = os.getenv("dev_server_id")
+    if dev_server_id is None:
+        raise ValueError("dev_server_id not set!")
+    return int(dev_server_id)
 
 def get_palette(canvas: str):
     """A simple function to find the palette of a canvas. If it isn't found, apply a default palette."""
