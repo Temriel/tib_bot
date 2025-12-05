@@ -11,7 +11,7 @@ import importlib
 load_dotenv()
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
-intents = discord.Intents.none()
+intents = discord.Intents.default()
 intents.guilds = True
 bot = commands.Bot(command_prefix='>', intents=intents)
 tree = bot.tree
@@ -20,6 +20,8 @@ owner_id = config.owner()
 @bot.event
 async def on_ready():
     print(f'Started. Logged in as {bot.user}.')
+    status = discord.CustomActivity(name="Watching over Pxls logs | /help")
+    await bot.change_presence(activity=status)
 
 async def load():
     for filename in os.listdir('./cogs'):
