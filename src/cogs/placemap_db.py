@@ -79,6 +79,7 @@ class placemap(commands.Cog):
         await interaction.response.send_modal(modal)
 
     @group.command(name='generate', description='Generate a placemap from a log key.')
+    @app_commands.describe(canvas='What canvas to generate the placemap for.')
     async def placemap_db_generate(self, interaction: discord.Interaction, canvas: str):
         """Generate a placemap by piping the necessary arguments to pxlslog-explorer."""
         user = interaction.user

@@ -157,8 +157,7 @@ class db(commands.Cog):
         print('Pixels cog loaded.')
 
     @app_commands.command(name='lookup', description='See how many pixels a certain user has placed for us.')
-    @app_commands.describe(pxls_username='Pxls username to look up.')
-    @app_commands.describe(discord_user='Discord username to look up.')
+    @app_commands.describe(pxls_username='Pxls username to look up.', discord_user='Discord username to look up.')
     async def pixels_db_lookup(self, interaction: discord.Interaction, pxls_username: Optional[str] = None, discord_user: Optional[discord.User] = None):
         """Find the total pixel count for a user & their rank (defined in config.py)"""
         internal_pxls_username: Optional[str] = None # what exists in the db

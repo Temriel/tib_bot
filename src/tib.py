@@ -30,6 +30,7 @@ async def load():
                 await bot.load_extension(f'cogs.{filename[:-3]}')
             except Exception as e:
                 print(f'Failed to load {filename[:-3]}: {e}')
+                
 # all commands in this file are just for making sure the bot Actually Works
 @tree.command(name='shutdown', description='Shut down the bot (ADMIN ONLY)')
 async def shutdown(interaction: discord.Interaction):

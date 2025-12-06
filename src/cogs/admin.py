@@ -218,6 +218,7 @@ class Admin(commands.Cog):
             print(f'An error occurred: {e}')
 
     @group.command(name='force-generate', description='Forcefully generate a placemap for a user (ADMIN ONLY).')
+    @app_commands.describe(user='The user to generate the placemap for.', canvas='What canvas to generate the placemap for.')
     async def placemap_db_generate_admin(self, interaction: discord.Interaction, user: discord.User, canvas: str):
         """Forcefully generate a placemap by piping the necessary arguments to pxlslog-explorer."""
         if not await is_owner_check(interaction):
@@ -290,6 +291,7 @@ class Admin(commands.Cog):
             return
     
     @group.command(name='force-check-user', description='Forcefully check how many pixels a user has placed on all recorded canvases (ADMIN ONLY).')
+    @app_commands.describe(user='The user to check (user ID works too).')
     async def placemap_db_force_check_user(self, interaction: discord.Interaction, user: discord.User):
         """Checks how many pixels a user has placed for TPE using logkeys - going past the limit of /logkey generate only checking after the feature was implemented."""
         try:
@@ -359,6 +361,7 @@ class Admin(commands.Cog):
             return
 
     @group.command(name='force-check-canvas', description='Forcefully check how many pixels all users have placed on a specific canvas (ADMIN ONLY).')
+    @app_commands.describe(canvas='What canvas to check (no c).')
     async def placemap_db_force_check_canvas(self, interaction: discord.Interaction, canvas: str):
         """Checks how many pixels all users have placed for TPE on a specific canvas using logkeys - going past the limit of /logkey generate only checking after the feature was implemented."""
         try:
