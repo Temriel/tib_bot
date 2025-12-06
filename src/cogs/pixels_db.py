@@ -208,8 +208,8 @@ class db(commands.Cog):
             if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
                 await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
                 return
-            get_users_all = ("SELECT user, SUM(pixels) as total_all FROM points WHERE canvas=? GROUP BY user ORDER BY total_all DESC")
-            cursor.execute(get_users_all, (canvas,)) # does the above
+            get_users_canvas = ("SELECT user, SUM(pixels) as total_all FROM points WHERE canvas=? GROUP BY user ORDER BY total_all DESC")
+            cursor.execute(get_users_canvas, (canvas,)) # does the above
         else: 
             get_users_all = "SELECT user, SUM(pixels) as total_all FROM points GROUP BY user ORDER BY total_all DESC"
             cursor.execute(get_users_all) # does the above

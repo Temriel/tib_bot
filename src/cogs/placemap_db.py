@@ -8,7 +8,7 @@ import re
 import time
 # from collections import defaultdict
 import utils.db_utils as db_utils
-from utils.db_utils import cursor, database, generate_placemap, find_pxls_username, most_active, tpe_pixels_count_user, tpe_pixels_count_canvas
+from utils.db_utils import cursor, database, generate_placemap, find_pxls_username, most_active
 
 owner_id = config.owner()
         
