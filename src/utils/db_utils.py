@@ -55,6 +55,13 @@ def get_stats(pxls_username: str) -> dict:
             break
     return {'total': total, 'rank': rank}
 
+def get_all_users() -> list[tuple[int, str]]:
+    """Get all linked Discord user IDs."""
+    query = "SELECT user_id, username FROM users"
+    cursor.execute(query)
+    results = cursor.fetchall()
+    return results
+
 async def render(user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str) -> tuple[asyncio.subprocess.Process, str, str]:
     """Render a placemap from a log file. Uses pxlslog-explorer render.exe."""
     bg, palette_path, output_path = config.paths(canvas, user.id, mode)
