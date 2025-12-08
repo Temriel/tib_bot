@@ -6,7 +6,7 @@ import sqlite3
 import time
 import re
 import utils.db_utils as db_utils
-from utils.db_utils import cursor, database, get_stats, generate_placemap, most_active, tpe_pixels_count_user, find_pxls_username, tpe_pixels_count_canvas
+from utils.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, find_pxls_username, tpe_pixels_count_canvas, description_format
 
 async def is_owner_check(interaction: discord.Interaction) -> bool:
     """Check if the user is the owner of the bot."""
@@ -231,16 +231,9 @@ class Admin(commands.Cog):
         state, results = await generate_placemap(user, canvas)
 
         if state:
-            total_pixels = results.get("total_pixels", 0)
-            undo = results.get("undo", 0)
-            mod = results.get("mod", 0)
-            survived = results.get("survived", 0)
-            survived_perc = results.get("survived_perc", 0)
-            tpe_pixels = results.get("tpe_pixels", 0)
-            tpe_griefs = results.get("tpe_griefs", 0)
-            filename = results.get("filename", 0)
-            user_log_file = results.get("user_log_file", 0)
-            mode = results.get("mode", 0)
+            constructed_desc = await description_format(canvas, results)
+            mode = results.get("mode", "0")
+            user_log_file = results.get("user_log_file", "0")
         else:
             await interaction.followup.send(results['error'])
             return
@@ -248,7 +241,7 @@ class Admin(commands.Cog):
         if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
             embed = discord.Embed(
             title=f'{pxls_username} on c{canvas}', 
-            description=f'**User ID:** {user.id}\n**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE Griefed:** {tpe_griefs}\n**Mod Overwrites:** {mod}\n**Surviving Pixels:** {survived} ({survived_perc}%)',
+            description=f'**User ID:** {user.id}\n{constructed_desc}',
             color=discord.Color.red()
             )
             embed.set_author(
@@ -262,16 +255,7 @@ class Admin(commands.Cog):
             elapsed_time = end_time - start_time
             print(f'/admin force-generate took {elapsed_time:.2f}s')
             file = discord.File(results["output_path"], filename=results["filename"])
-            active_start_time = time.time()
-            (active_x, active_y), active_count = await most_active(results["user_log_file"])
-            active_end_time = time.time()
-            print(f'({active_x}, {active_y}) with {active_count} pixels ({active_end_time - active_start_time:.2f}s)')
-            description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels\n**Surviving Pixels:** {survived} ({survived_perc}%)'
-            if config.tpe(canvas):
-                description += f'\n**Pixels for TPE:** {results["tpe_pixels"]}'
-                description += f'\n**Pixels Griefed:** {results["tpe_griefs"]}'
-            if mod > 0:
-                description += f'\n**Mod Overwrites:** {mod}'
+            description=constructed_desc
             embed = discord.Embed(
                 title=f'Your Placemap for Canvas {canvas}', 
                 description=description,
@@ -281,7 +265,7 @@ class Admin(commands.Cog):
                 name=user.global_name or user.name, 
                 icon_url=user.avatar.url if user.avatar else user.default_avatar.url
                 )
-            embed.set_image(url=f'attachment://{filename}')
+            embed.set_image(url=f'attachment://{results["filename"]}')
             embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
             view = db_utils.PlacemapAltView(user, canvas, mode, user_log_file)
             await interaction.followup.send(embed=embed, file=file, view=view)

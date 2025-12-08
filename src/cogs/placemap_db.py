@@ -8,7 +8,7 @@ import re
 import time
 # from collections import defaultdict
 import utils.db_utils as db_utils
-from utils.db_utils import cursor, database, generate_placemap, find_pxls_username, most_active
+from utils.db_utils import cursor, database, generate_placemap, find_pxls_username, description_format
 
 owner_id = config.owner()
         
@@ -90,16 +90,9 @@ class placemap(commands.Cog):
         state, results = await generate_placemap(user, canvas)
 
         if state:
-            total_pixels = results.get("total_pixels", 0)
-            undo = results.get("undo", 0)
-            mod = results.get("mod", 0)
-            survived = results.get("survived", 0)
-            survived_perc = results.get("survived_perc", 0)
-            tpe_pixels = results.get("tpe_pixels", 0)
-            tpe_griefs = results.get("tpe_griefs", 0)
-            filename = results.get("filename", 0)
-            user_log_file = results.get("user_log_file", 0)
-            mode = results.get("mode", 0)
+            constructed_desc = await description_format(canvas, results)
+            mode = results.get("mode", "0")
+            user_log_file = results.get("user_log_file", "0")
         else:
             await interaction.followup.send(results['error'])
             return
@@ -108,7 +101,7 @@ class placemap(commands.Cog):
         if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
             embed = discord.Embed(
             title=f'{pxls_username} on c{canvas}', 
-            description=f'**User ID:** {user.id}\n**Pixels placed:** {total_pixels}\n**Undos:** {undo}\n**For TPE:** {tpe_pixels}\n**TPE griefed:** {tpe_griefs}\n**Mod overwrites:** {mod}\n**Surviving pixels:** {survived} ({survived_perc}%)',
+            description=f'**User ID:** {user.id}\n{constructed_desc}',
             color=discord.Color.purple()
             )
             embed.set_author(
@@ -122,16 +115,7 @@ class placemap(commands.Cog):
             elapsed_time = end_time - start_time
             print(f'/logkey generate took {elapsed_time:.2f}s')
             file = discord.File(results["output_path"], filename=results["filename"])
-            active_start_time = time.time()
-            (active_x, active_y), active_count = await most_active(results["user_log_file"])
-            active_end_time = time.time()
-            print(f'({active_x}, {active_y}) with {active_count} pixels ({active_end_time - active_start_time:.2f}s)')
-            description=f'**Pixels Placed:** {total_pixels}\n**Undos:** {undo}\n**Most Active:** ({active_x}, {active_y}) with {active_count} pixels\n**Surviving Pixels:** {survived} ({survived_perc}%)'
-            if config.tpe(canvas):
-                description += f'\n**Pixels for TPE:** {results["tpe_pixels"]}'
-                description += f'\n**Pixels griefed:** {results["tpe_griefs"]}'
-            if mod > 0:
-                description += f'\n**Mod Overwrites:** {mod}'
+            description=constructed_desc
             embed = discord.Embed(
                 title=f'Your Placemap for Canvas {canvas}', 
                 description=description,
@@ -141,7 +125,7 @@ class placemap(commands.Cog):
                 name=user.name, 
                 icon_url=user.avatar.url if user.avatar else user.default_avatar.url
                 )
-            embed.set_image(url=f'attachment://{filename}')
+            embed.set_image(url=f'attachment://{results["filename"]}')
             embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
             view = db_utils.PlacemapAltView(user, canvas, mode, user_log_file)
             await interaction.followup.send(embed=embed, file=file, view=view)

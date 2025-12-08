@@ -136,7 +136,7 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
     """Find survival stats on a canvas"""
     def process_stats():
         final_state = {}
-        replaced_user = 0
+        replaced_user = 0 # UNUSED
         try:
             with open (user_log_file, newline='') as csvfile:
                 reader = csv.reader(csvfile, delimiter='\t')
@@ -152,8 +152,9 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
                             final_state.pop(coord, None)
         except FileNotFoundError as e:
             print(f'{e}')
-            return 0
+            return 0, 0, 0
         
+        replaced_other = 0 # UNUSED
         survived = 0
         try:
             with Image.open(final_canvas_path).convert('RGB') as final_canvas_image:
@@ -165,13 +166,15 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
                     if index >= len(palette):
                         continue
                     placed_pixel = palette[index]
-                    final_pixel = final_canvas_image.getpixel(coord) # error here
+                    final_pixel = final_canvas_image.getpixel(coord)
                     if final_pixel == placed_pixel:
                         survived += 1
+                    else:
+                        replaced_other += 1
         except FileNotFoundError as e:
             print(f'{e}')
-            return 0
-        return survived
+            return 0, 0, 0
+        return replaced_user, replaced_other, survived 
     return await asyncio.to_thread(process_stats)
 
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple [int, int]:
@@ -380,15 +383,25 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         filter_end_time = time.time()
         print(f'filter.exe took {filter_end_time - filter_start_time:.2f}s')
         total_pixels, undo, mod = await pixel_counting(user_log_file, canvas)
+        
         survive_start_time = time.time()
-        survived = await survival(user_log_file, f'{ple_dir}/pxls-final-canvas/canvas-{canvas}-final.png', await gpl_palette(palette_path))
+        replaced_user, replaced_other, survived = await survival(user_log_file, f'{ple_dir}/pxls-final-canvas/canvas-{canvas}-final.png', await gpl_palette(palette_path))
         survived_perc = (survived / total_pixels * 100) if total_pixels > 0 else 0
         survived_perc = f'{survived_perc:.2f}'
         survive_end_time = time.time()
+        
+        active_start_time = time.time()
+        (active_x, active_y), active_count = await most_active(user_log_file)
+        active_end_time = time.time()
+        
         print(f'{total_pixels} pixels placed')
         print(f'{undo} pixels undone')
+        print(f'{active_x, active_y} with {active_count} pixels (took {active_end_time - active_start_time:.2f}s)')
         print(f'{mod} mod overwrites')
-        print(f'{survived} ({survived_perc}%) pixels survived ({survive_end_time - survive_start_time:.2f}s)')
+        print(f'{survived} ({survived_perc}%) pixels survived (took {survive_end_time - survive_start_time:.2f}s)')
+        print(f'{replaced_user} pixels replaced by self')
+        print(f'{replaced_other} pixels replaced by others')
+        
         tpe_pixels = 0
         tpe_griefs = 0
         if config.tpe(canvas):
@@ -404,22 +417,57 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
         render_end_time = time.time()
         print(f'render.exe took {render_end_time - render_start_time:.2f}s')
+        
         if render_result.returncode != 0:
             return False, {'error': f'Something went wrong when generating the placemap! Ping Temriel.'}
         return True, {
             'total_pixels': total_pixels, # placed - undo
-            'undo': undo,
-            'mod': mod,
+            'undo': undo, # reverses a pixel
+            'mod': mod, # mod overwrites, not included in total_pixels & is almost always 0
+            'active_x': active_x,
+            'active_y': active_y,
+            'active_count': active_count,
             'survived': survived, # pixels that are the same as the "final" state of the canvas
             'survived_perc': survived_perc, # above but % form
+            'replaced_user': replaced_user, # pixels replaced by self
+            'replaced_other': replaced_other, # pixels replaced by others
             'tpe_pixels': tpe_pixels, # for tpe - griefs
-            'tpe_griefs': tpe_griefs,
+            'tpe_griefs': tpe_griefs, # not always accurate
             'filename': filename,
             'output_path': output_path,
             'user_log_file': user_log_file,
             'mode': mode # defaults to normal
         }
-        
+
+async def description_format(canvas: str, results: dict) -> str:
+    """Generate description string for placemap embed."""
+    total_pixels = results.get("total_pixels", 0)
+    undo = results.get("undo", 0)
+    mod = results.get("mod", 0)
+    active_x = results.get("active_x", 0)
+    active_y = results.get("active_y", 0)
+    active_count = results.get("active_count", 0)
+    survived = results.get("survived", 0)
+    survived_perc = results.get("survived_perc", 0)
+    replaced_user = results.get("replaced_user", 0)
+    replaced_other = results.get("replaced_other", 0)
+    tpe_pixels = results.get("tpe_pixels", 0)
+    tpe_griefs = results.get("tpe_griefs", 0)
+    constructed_desc= (
+        f'**Pixels Placed:** {total_pixels}\n'
+        f'**Undos:** {undo}\n'
+        f'**Surviving Pixels:** {survived} ({survived_perc}%)\n'
+        # f'**Replaced by Self:** {replaced_user}\n'    # Not used due to faulty math, since this only uses the userlog file instead of the full canvas log
+        # f'**Replaced by Others:** {replaced_other}\n' # which means grief defence counts towards replaced by others. Esp since "replaced by others" is only compared against final canvas state
+        f'**Most Active:** ({active_x}, {active_y}) with {active_count} pixels'
+    )
+    if config.tpe(canvas):
+        constructed_desc += f'\n**Pixels for TPE:** {tpe_pixels}'
+        constructed_desc += f'\n**Pixels Griefed:** {tpe_griefs}'
+    if mod > 0:
+        constructed_desc += f'\n**Mod Overwrites:** {mod}'
+    return constructed_desc
+
 async def find_pxls_username(user: Union[discord.User, discord.Member]) -> str:
     """Find the pxls.space username linked to a Discord user ID."""
     query = "SELECT username FROM users WHERE user_id = ?"
