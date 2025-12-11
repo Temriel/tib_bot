@@ -1,12 +1,12 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import utils.config as config
+import tib_utility.config as config
 import sqlite3
 import time
 import re
-import utils.db_utils as db_utils
-from utils.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, find_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX
+import tib_utility.db_utils as db_utils
+from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, find_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX
 
 async def is_owner_check(interaction: discord.Interaction) -> bool:
     """Check if the user is the owner of the bot."""
@@ -39,10 +39,10 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                 fail = []
                 for canvas, key in zip(canvases, keys):
                     if not CANVAS_REGEX.fullmatch(canvas):
-                        fail.append((f'c{canvas}, Invalid canvas format'))
+                        fail.append(f'c{canvas}, Invalid canvas format')
                         continue
                     if not KEY_REGEX.fullmatch(key):
-                        fail.append((f'c{canvas}, Invalid key format'))
+                        fail.append(f'c{canvas}, Invalid key format')
                         continue
                     try:
                         cursor.execute(query, (user_id, canvas, key))
@@ -50,9 +50,9 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                         database.commit()
                         success.append(f'c{canvas}')
                     except sqlite3.OperationalError as e:
-                        fail.append((f'c{canvas}, SQLite error: {e}'))
+                        fail.append(f'c{canvas}, SQLite error: {e}')
                     except Exception as e:
-                        fail.append((f'c{canvas}, Error: {e}'))
+                        fail.append(f'c{canvas}, Error: {e}')
                 message = f'<@{user_id}> ({user_id}) now has keys for canvases: {', '.join(success)}'
                 if fail:
                     message += f'\nFailed for canvases: {', '.join(fail)}'
@@ -68,10 +68,10 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                 fail = []
                 for user_id, key in zip(user_ids, keys):
                     if not re.fullmatch(r'\d{17,}', user_id):
-                        fail.append((f'<@{user_id}> ({user_id}), Invalid user ID format'))
+                        fail.append(f'<@{user_id}> ({user_id}), Invalid user ID format')
                         continue
                     if not KEY_REGEX.fullmatch(key):
-                        fail.append((f'<@{user_id}> ({user_id}), Invalid key format'))
+                        fail.append(f'<@{user_id}> ({user_id}), Invalid key format')
                         continue
                     try:
                         cursor.execute(query, (int(user_id), canvas, key))
@@ -79,9 +79,9 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                         database.commit()
                         success.append(f'<@{user_id}> ({user_id})')
                     except sqlite3.OperationalError as e:
-                        fail.append((f'{user_id}, SQLite error: {e}'))
+                        fail.append(f'{user_id}, SQLite error: {e}')
                     except Exception as e:
-                        fail.append((f'{user_id}, Error: {e}'))
+                        fail.append(f'{user_id}, Error: {e}')
                 message = f'c{canvas} now has logkeys for: {', '.join(success)}'
                 if fail:
                     message += f'\nFailed for users: {', '.join(fail)}'
@@ -285,10 +285,10 @@ class Admin(commands.Cog):
             await interaction.response.defer(ephemeral=True, thinking=True)
             progress = await interaction.followup.send(f'Checking how many pixels <@{user.id}> has placed on all recorded canvases...', ephemeral=True, wait=True)
             
-            async def callback(canvas, idx, total):
+            async def callback(used_canvas, idx, total):
                 """Update the message so you can see THINGS are HAPPENING."""
-                await progress.edit(content=f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases... (c{canvas} {idx}/{total})')
-                print(f'Processing c{canvas} ({idx}/{total}) for user {user.id}')
+                await progress.edit(content=f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases... (c{used_canvas} {idx}/{total})')
+                print(f'Processing c{used_canvas} ({idx}/{total}) for user {user.id}')
             results = await tpe_pixels_count_user(user.id, callback=callback)
             if not results:
                 await progress.edit(content=f'No logs found for <@{user.id}>')
@@ -330,7 +330,7 @@ class Admin(commands.Cog):
                 first_embed.set_author(
                     name=user.global_name or user.name, 
                     icon_url=user.avatar.url if user.avatar else user.default_avatar.url
-                    )    
+                    )
                 await progress.edit(content=None, embed=first_embed)
                 if len(chunks) > 1:
                     for chunk in chunks[1:]:

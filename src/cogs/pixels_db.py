@@ -5,9 +5,8 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 import time
 import io
-import re
+from tib_utility.db_utils import cursor, get_linked_discord_username, get_linked_pxls_username, get_stats, CANVAS_REGEX, KEY_REGEX, USERNAME_REGEX
 from typing import Union, Optional
-from utils.db_utils import cursor, get_linked_discord_username, get_linked_pxls_username, get_stats, CANVAS_REGEX, KEY_REGEX, USERNAME_REGEX
 
 def create_pages(items: list, page: int, page_size: int = 30):
     """Function to determine the amount of pages & what goes where."""
@@ -101,7 +100,7 @@ class LeaderboardView(discord.ui.View):
                 (str(total_all), pixels_start, pixels_width)
             ]):
                 pos_x = start + (width / 2)
-                pos_y = y + (rows_height) / 2 - 1
+                pos_y = y + rows_height / 2 - 1
                 draw.text((pos_x, pos_y), text, fill="white", font=font, anchor="mm")
             y += rows_height
 
@@ -208,7 +207,7 @@ class db(commands.Cog):
             if not CANVAS_REGEX.fullmatch(canvas):
                 await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
                 return
-            get_users_canvas = ("SELECT user, SUM(pixels) as total_all FROM points WHERE canvas=? GROUP BY user ORDER BY total_all DESC")
+            get_users_canvas = "SELECT user, SUM(pixels) as total_all FROM points WHERE canvas=? GROUP BY user ORDER BY total_all DESC"
             cursor.execute(get_users_canvas, (canvas,)) # does the above
         else: 
             get_users_all = "SELECT user, SUM(pixels) as total_all FROM points GROUP BY user ORDER BY total_all DESC"

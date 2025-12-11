@@ -1,10 +1,10 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import utils.config as config
 from typing import Optional
 import re
-from utils.db_utils import cursor, database
+from tib_utility.db_utils import cursor, database
+import tib_utility.config as config
 
 owner_id = config.owner()
 
@@ -14,10 +14,10 @@ COG_CATEGORIES = {
     'commander': 'General Commands',
 }
 
-def bot_commands(commands, parent_name=''):
+def bot_commands(existing_commands, parent_name=''):
     """Find all bot commands for /help"""
     command_list = []
-    for command in commands:
+    for command in existing_commands:
         full_name = f'{parent_name} {command.name}'.strip()
         if isinstance(command, app_commands.Group):
             command_list.extend(bot_commands(command.commands, parent_name=full_name))

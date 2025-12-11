@@ -4,8 +4,8 @@ from discord.ext import commands
 import os
 from dotenv import load_dotenv
 import logging
-import utils.config as config
-import utils.db_utils as db_utils
+import tib_utility.config as config
+import tib_utility.db_utils as db_utils
 import importlib
 
 load_dotenv()

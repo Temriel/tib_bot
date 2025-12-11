@@ -2,13 +2,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import sqlite3
-import utils.config as config
 # import subprocess # for error handling
-import re
 import time
 # from collections import defaultdict
-import utils.db_utils as db_utils
-from utils.db_utils import cursor, database, generate_placemap, find_pxls_username, description_format, CANVAS_REGEX, KEY_REGEX
+import tib_utility.config as config
+import tib_utility.db_utils as db_utils
+from tib_utility.db_utils import cursor, database, generate_placemap, find_pxls_username, description_format, CANVAS_REGEX, KEY_REGEX
 
 owner_id = config.owner()
         
@@ -47,7 +46,7 @@ class placemapDBAdd(discord.ui.Modal, title='Add your log key.'):
 ### DISCORD COMMANDS BELOW ###
 ##############################
 
-class placemap(commands.Cog):
+class Placemap(commands.Cog):
     def __init__(self, client):
         self.client = client
 
@@ -135,4 +134,4 @@ class placemap(commands.Cog):
             return
 
 async def setup(client):
-    await client.add_cog(placemap(client))
+    await client.add_cog(Placemap(client))
