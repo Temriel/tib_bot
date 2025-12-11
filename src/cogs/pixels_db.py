@@ -7,7 +7,7 @@ import time
 import io
 import re
 from typing import Union, Optional
-from utils.db_utils import cursor, get_linked_discord_username, get_linked_pxls_username, get_stats
+from utils.db_utils import cursor, get_linked_discord_username, get_linked_pxls_username, get_stats, CANVAS_REGEX, KEY_REGEX, USERNAME_REGEX
 
 def create_pages(items: list, page: int, page_size: int = 30):
     """Function to determine the amount of pages & what goes where."""
@@ -168,7 +168,7 @@ class db(commands.Cog):
             return
         # only pxls username, finds discord if any 
         elif pxls_username:
-            if not re.fullmatch(r'^[a-zA-Z0-9_-]{1,32}$', pxls_username):
+            if not USERNAME_REGEX.fullmatch(pxls_username):
                 await interaction.response.send_message('Invalid username', ephemeral=True)
                 return
             internal_pxls_username = pxls_username
@@ -205,7 +205,7 @@ class db(commands.Cog):
         """Create a user leaderboard."""
         start_time = time.time()
         if canvas:
-            if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+            if not CANVAS_REGEX.fullmatch(canvas):
                 await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
                 return
             get_users_canvas = ("SELECT user, SUM(pixels) as total_all FROM points WHERE canvas=? GROUP BY user ORDER BY total_all DESC")

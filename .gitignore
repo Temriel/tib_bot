@@ -1,6 +1,5 @@
 #mine
-*.db
-*.db-journal
+*.db*
 *.ttf
 .vscode
 *.bat 

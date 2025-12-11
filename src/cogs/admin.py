@@ -6,7 +6,7 @@ import sqlite3
 import time
 import re
 import utils.db_utils as db_utils
-from utils.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, find_pxls_username, tpe_pixels_count_canvas, description_format
+from utils.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, find_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX
 
 async def is_owner_check(interaction: discord.Interaction) -> bool:
     """Check if the user is the owner of the bot."""
@@ -38,10 +38,10 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                 success = []
                 fail = []
                 for canvas, key in zip(canvases, keys):
-                    if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+                    if not CANVAS_REGEX.fullmatch(canvas):
                         fail.append((f'c{canvas}, Invalid canvas format'))
                         continue
-                    if not re.fullmatch(r'(?=.*[a-z])[a-z0-9]{512}', key):
+                    if not KEY_REGEX.fullmatch(key):
                         fail.append((f'c{canvas}, Invalid key format'))
                         continue
                     try:
@@ -70,7 +70,7 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                     if not re.fullmatch(r'\d{17,}', user_id):
                         fail.append((f'<@{user_id}> ({user_id}), Invalid user ID format'))
                         continue
-                    if not re.fullmatch(r'(?=.*[a-z])[a-z0-9]{512}', key):
+                    if not KEY_REGEX.fullmatch(key):
                         fail.append((f'<@{user_id}> ({user_id}), Invalid key format'))
                         continue
                     try:
@@ -155,7 +155,7 @@ class Admin(commands.Cog):
                 return
             if not isinstance(canvas, str):
                 canvas = str(canvas)
-            if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+            if not CANVAS_REGEX.fullmatch(canvas):
                 await interaction.response.send_message("Invalid format! A canvas code can only contain a-z and 0-9.", ephemeral=True)
                 return
             prev_stats = get_stats(user)
@@ -283,7 +283,7 @@ class Admin(commands.Cog):
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
                 return
             await interaction.response.defer(ephemeral=True, thinking=True)
-            progress = await interaction.followup.send(f'Checking how many pixels <@{user.id}> has placed on all recorded TPE canvases...', ephemeral=True, wait=True)
+            progress = await interaction.followup.send(f'Checking how many pixels <@{user.id}> has placed on all recorded canvases...', ephemeral=True, wait=True)
             
             async def callback(canvas, idx, total):
                 """Update the message so you can see THINGS are HAPPENING."""
@@ -360,7 +360,7 @@ class Admin(commands.Cog):
                 print(f'Processing user {user_id} ({idx}/{total}) for c{canvas}')
             results = await tpe_pixels_count_canvas(canvas, callback=callback)
             if not results:
-                await progress.edit(content=f'No logs found for c{canvas}')
+                await progress.edit(content=f'No logs found for c{canvas}, or there\'s no user data present.')
                 return
             cursor.execute('SELECT user_id, username FROM users WHERE username IS NOT NULL')
             linked_users = dict(cursor.fetchall())

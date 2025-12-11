@@ -8,7 +8,7 @@ import re
 import time
 # from collections import defaultdict
 import utils.db_utils as db_utils
-from utils.db_utils import cursor, database, generate_placemap, find_pxls_username, description_format
+from utils.db_utils import cursor, database, generate_placemap, find_pxls_username, description_format, CANVAS_REGEX, KEY_REGEX
 
 owner_id = config.owner()
         
@@ -17,10 +17,10 @@ class placemapDBAdd(discord.ui.Modal, title='Add your log key.'):
     key = discord.ui.TextInput(label='Log key (512 char)', style=discord.TextStyle.paragraph, max_length=512, min_length=512)
     
     async def on_submit(self, interaction: discord.Interaction):
-        if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', self.canvas.value):
+        if not CANVAS_REGEX.fullmatch(self.canvas.value):
             await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
             return
-        if not re.fullmatch(r'(?=.*[a-z])[a-z0-9]{512}', self.key.value):
+        if not KEY_REGEX.fullmatch(self.key.value):
             await interaction.response.send_message('Invalid format! A log key can only contain a-z and 0-9.', ephemeral=True)
             return
         

@@ -9,6 +9,12 @@ from typing import Union, Optional
 import discord
 from PIL import Image
 import utils.config as config
+import functools
+from functools import lru_cache
+
+CANVAS_REGEX = re.compile(r'^(?![cC])[a-z0-9]{1,4}+$')
+KEY_REGEX = re.compile(r'(?=.*[a-z])[a-z0-9]{512}$')
+USERNAME_REGEX = re.compile(r'^[a-zA-Z0-9_-]{1,32}$')
 
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.dirname(CUR_DIR)
@@ -17,6 +23,9 @@ DB_PATH = os.path.join(SRC_DIR, 'database.db')
 
 database = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = database.cursor()
+cursor.execute("PRAGMA journal_mode=WAL;")
+cursor.execute("PRAGMA synchronous=NORMAL;")
+cursor.execute("PRAGMA temp_store=MEMORY;")
 database.execute('CREATE TABLE IF NOT EXISTS notif (user_id INT PRIMARY KEY, status BOOLEAN, FOREIGN KEY (user_id) REFERENCES users(user_id))')
 database.execute('CREATE TABLE IF NOT EXISTS points(user STR, canvas STR, pixels INT, PRIMARY KEY (user, canvas))')
 database.execute('CREATE TABLE IF NOT EXISTS users (user_id INT, username STR UNIQUE, PRIMARY KEY (user_id))')
@@ -82,7 +91,10 @@ async def render(user: Union[discord.User, discord.Member], canvas: str, mode: s
     return render_result, filename, output_path
 
 async def gpl_palette(palette_path: str) -> list[tuple[int, int, int]]:
-    """Find palette RGB from a .gpl file."""
+    return await asyncio.to_thread(read_gpl_palette, palette_path)
+
+@lru_cache(maxsize=128)
+def read_gpl_palette(palette_path: str):
     palette = []
     with open(palette_path, 'r') as f:
         for line in f:
@@ -102,6 +114,9 @@ async def gpl_palette(palette_path: str) -> list[tuple[int, int, int]]:
 # Placemap handling
 
 async def most_active(user_log_file: str) -> tuple[tuple[int, int], int]:
+    return await asyncio.to_thread(read_most_active, user_log_file)
+
+def read_most_active(user_log_file: str):
     """Find the most active pixel using a user log file."""
     pixel_counts = {}
     with open (user_log_file, newline='') as csvfile:
@@ -119,6 +134,9 @@ async def most_active(user_log_file: str) -> tuple[tuple[int, int], int]:
         return (0, 0), 0
 
 async def pixel_counting(user_log_file: str, canvas: str):
+    return await asyncio.to_thread(read_pixel_counting, user_log_file)
+
+def read_pixel_counting(user_log_file: str):
     """Find placement amounts on a canvas"""
     place, undo, mod = 0, 0, 0
     with open(user_log_file, 'r') as log_key:
@@ -187,10 +205,21 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     try:
         initial_canvas_image = Image.open(initial_canvas_path).convert('RGB')
         initial_canvas = initial_canvas_image.load()
-        for path in glob.glob(temp_pattern):
-            img = Image.open(path).convert('RGBA')
-            template_images.append(img)
-            template_map.append(img.load())
+        template_dir = os.path.dirname(temp_pattern)
+        if os.path.isdir(template_dir):
+            with os.scandir(template_dir) as entries:
+                for entry in entries:
+                    if not entry.is_file():
+                        continue
+                    if not entry.name.lower().endswith('.png'):
+                        continue
+                    path = os.path.join(template_dir, entry.name)
+                    try:
+                        img = Image.open(path).convert('RGBA')
+                        template_images.append(img)
+                        template_map.append(img.load())
+                    except Exception as e:
+                        print(f'Error loading template image {path}: {e}')
     except FileNotFoundError as e:
         print(f'{e}')
         return 0, 0
@@ -261,18 +290,28 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
 async def tpe_pixels_count_user(user_id: int, callback = None) -> dict:
     """Finds how many pixels a user has placed on all recorded TPE canvases using user logfiles."""
     ple_dir = config.pxlslog_explorer_dir
-    user_log_file_pattern = f'{ple_dir}/pxls-userlogs-tib/{user_id}_pixels_c*.log'
-    found_user_logs = glob.glob(user_log_file_pattern)
-    canvases = []
-    for path in found_user_logs:
-        match = re.search(r'_c(.+?)\.log$', path)
-        if match:
-            canvas_id = match.group(1)
-            if config.tpe(canvas_id):
-                canvases.append(canvas_id)
-    results = {}
-    total = len(canvases)
-    for idx, canvas in enumerate(canvases):
+    if not ple_dir:
+        print('Pxlslog-explorer directory is not configured.')
+        return {}
+    user_logs_dir = os.path.join(ple_dir, 'pxls-userlogs-tib')
+    found_user_logs = []
+    if os.path.isdir(user_logs_dir):
+        with os.scandir(user_logs_dir) as entries:
+            user_logs_constant = f'{user_id}_pixels_c'
+            for entry in entries:
+                if not entry.is_file():
+                    continue
+                if entry.name.startswith(user_logs_constant) and entry.name.endswith('.log'):
+                    found_user_logs.append(os.path.join(user_logs_dir, entry.name))
+    results: dict[str, dict] = {}
+    total = len(found_user_logs)
+    for idx, user_log_file in enumerate(found_user_logs):
+        basename = os.path.basename(user_log_file)
+        match = re.match(r'^(\d+)_pixels_c(.+)\.log$', basename, flags=re.IGNORECASE)
+        if not match:
+            print(f'Could not extract canvas from filename: {basename}')
+            continue
+        canvas = match.group(2)
         if callback and ((idx + 1) % 10 == 0 or (idx + 1) == total):
             await callback(canvas, idx + 1, total)
         else:
@@ -293,18 +332,29 @@ async def tpe_pixels_count_user(user_id: int, callback = None) -> dict:
                 }
         except Exception as e:
             print(f'An error occurred while processing canvas {canvas} for user {user_id}: {e}')
-            results[canvas] = (0, 0, 0, 0)
+            results[canvas] = {'total_pixels': 0, 'undo': 0, 'tpe_pixels': 0, 'tpe_griefs': 0}
     return results
 
 async def tpe_pixels_count_canvas(canvas: str, callback = None) -> dict:
     """Find how many pixels have been placed on a specific canvas by all registered users. Those with no data are ignored."""
     if not config.tpe(canvas):
-        print(f'Canvas c{canvas} is not a TPE canvas.')
-        return {}
+        print(f'Canvas c{canvas} is not a TPE canvas, checking anyway.')
     ple_dir = config.pxlslog_explorer_dir
-    user_log_file_pattern = f'{ple_dir}/pxls-userlogs-tib/*_pixels_c{canvas}.log'
-    found_user_logs = glob.glob(user_log_file_pattern)
-    results = {}
+    if not ple_dir:
+        print('Pxlslog-explorer directory is not configured.')
+        return {}
+    user_logs_dir = os.path.join(ple_dir, 'pxls-userlogs-tib')
+    found_user_logs = []
+    if os.path.isdir(user_logs_dir):
+        with os.scandir(user_logs_dir) as entries:
+            for entry in entries:
+                canvas_logs_constant = f'_pixels_c{canvas}.log'
+                if not entry.is_file():
+                    continue
+                if entry.name.lower().endswith(canvas_logs_constant):
+                    found_user_logs.append(os.path.join(user_logs_dir, entry.name))
+    
+    results: dict[int, dict] = {}
     total = len(found_user_logs)
     for idx, user_log_file in enumerate(found_user_logs):
         user_id = -1
@@ -332,7 +382,7 @@ async def tpe_pixels_count_canvas(canvas: str, callback = None) -> dict:
                 }
         except Exception as e:
             print(f'An error occurred while processing canvas {canvas} for user {user_id}: {e}')
-            results[user_id] = (0, 0, 0, 0)
+            results[user_id] = {'total_pixels': 0, 'undo': 0, 'tpe_pixels': 0, 'tpe_griefs': 0}
     return results
 
 async def generate_placemap(user: Union[discord.User, discord.Member], canvas: str) -> tuple[bool, dict]:
@@ -346,7 +396,7 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         mode = 'normal'
         _, palette_path, _ = config.paths(canvas, user.id, mode)
 
-        if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+        if not CANVAS_REGEX.fullmatch(canvas):
             return False, {'error': f'Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.'}
             
         if not user_key:
@@ -357,7 +407,7 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
             return False, {'error': f'Your key is just a bunch of numbers smh.'}
         
         user_key = str(user_key)
-        if not re.fullmatch(r'(?=.*[a-z])[a-z0-9]{512}', user_key):
+        if not KEY_REGEX.fullmatch(user_key):
             return False, {'error': f'Invalid format! A log key can only contain a-z, and 0-9.'}
 
         user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
