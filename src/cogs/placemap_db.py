@@ -46,6 +46,11 @@ class placemapDBAdd(discord.ui.Modal, title='Add your log key.'):
 ### DISCORD COMMANDS BELOW ###
 ##############################
 
+async def open_modal(interaction: discord.Interaction):
+    modal = placemapDBAdd()
+    await interaction.response.send_modal(modal)
+
+
 class Placemap(commands.Cog):
     def __init__(self, client):
         self.client = client
@@ -69,13 +74,10 @@ class Placemap(commands.Cog):
             color=discord.Color.purple()
             )
         button = discord.ui.Button(label='Add Log Key', style=discord.ButtonStyle.primary)
-        button.callback = self.open_modal
+        button.callback = open_modal
         view = discord.ui.View()
         view.add_item(button)
         await interaction.response.send_message(embed=embed, view=view)
-    async def open_modal(self, interaction: discord.Interaction):
-        modal = placemapDBAdd()
-        await interaction.response.send_modal(modal)
 
     @group.command(name='generate', description='Generate a placemap from a log key.')
     @app_commands.describe(canvas='What canvas to generate the placemap for.')

@@ -96,7 +96,7 @@ async def main():
 
 asyncio.run(main())
 print('Starting bot...')
-token = os.getenv("bot_token")
+token = os.getenv("BOT_TOKEN")
 if not token:
     raise ValueError("No token found in .env file.")
 bot.run(token, log_handler=handler)

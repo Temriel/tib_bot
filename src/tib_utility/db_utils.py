@@ -17,7 +17,7 @@ USERNAME_REGEX = re.compile(r'^[a-zA-Z0-9_-]{1,32}$')
 
 CUR_DIR = Path(__file__).resolve()
 SRC_DIR = CUR_DIR.parents[1]
-ROOT_DIR = CUR_DIR.parent
+ROOT_DIR = CUR_DIR.parents[2]
 DB_PATH = SRC_DIR / 'database.db'
 
 database = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -216,7 +216,7 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple[
     int, int]:
     """Find the amount of pixels placed for TPE on a specified canvas using template images. Handles virgin pixels."""
-    palette_rgb = await gpl_palette(palette_path)
+    palette_rgb = [tuple(c) for c in await gpl_palette(palette_path)]
     if not palette_rgb:
         return 0, 0
     template_images = []

@@ -2,31 +2,31 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 default_palette = 13 # REMINDER to change this
-pxlslog_explorer_dir = os.getenv("pxlslog_explorer_dir")
+pxlslog_explorer_dir = os.getenv("PXLSLOG_EXPLORER_DIR")
 
 def owner():
     """Defining an owner within Tib."""
-    owner_id = os.getenv("owner_id")
+    owner_id = os.getenv("OWNER_ID")
     if owner_id is None:
         raise ValueError("owner_id not set!")
     return int(owner_id)
 def update_channel():
     """Channel for Tib status updates (rankups, placemap stats, etc.)"""
-    update_channel_id = os.getenv("update_channel_id")
+    update_channel_id = os.getenv("UPDATE_CHANNEL_ID")
     if update_channel_id is None:
-        raise ValueError("update_channel_id not set!")
+        raise ValueError("UPDATE_CHANNEL_ID not set!")
     return int(update_channel_id)
 def admin_server():
     """Guild for admin commands."""
-    admin_server_id = os.getenv("admin_server_id")
+    admin_server_id = os.getenv("ADMIN_SERVER_ID")
     if admin_server_id is None:
-        raise ValueError("admin_server_id not set!")
+        raise ValueError("ADMIN_SERVER_ID not set!")
     return int(admin_server_id)
 def dev_server():
     """Guild for development testing."""
-    dev_server_id = os.getenv("dev_server_id")
+    dev_server_id = os.getenv("DEV_SERVER_ID")
     if dev_server_id is None:
-        raise ValueError("dev_server_id not set!")
+        raise ValueError("DEV_SERVER_ID not set!")
     return int(dev_server_id)
 
 def get_palette(canvas: str):

@@ -4,7 +4,7 @@ CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.dirname(CUR_DIR)
 sys.path.append(SRC_DIR)
 
-from utils.db_utils import cursor, database, get_all_users
+from tib_utility.db_utils import cursor, database, get_all_users
 import tkinter
 from tkinter import messagebox, ttk
 

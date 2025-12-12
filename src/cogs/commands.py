@@ -52,8 +52,8 @@ class commander(commands.Cog):
             if cog_name == 'admin':
                 continue
             category = COG_CATEGORIES.get(cog_name, cog.__class__.__name__)
-            commands = getattr(cog, '__cog_app_commands__', [])
-            for command in bot_commands(commands):
+            found_commands = getattr(cog, '__cog_app_commands__', [])
+            for command in bot_commands(found_commands):
                 full_name, description = command
                 categories.setdefault(category, []).append(f'* `{full_name}`: {description}')
 
@@ -61,10 +61,10 @@ class commander(commands.Cog):
             title = 'Available Commands',
             color= discord.Color.purple()
         )
-        for category, commands in categories.items():
+        for category, found_commands in categories.items():
             embed.add_field(
                 name=category,
-                value='\n'.join(commands) if commands else 'No commands available in this category.',
+                value='\n'.join(found_commands) if found_commands else 'No commands available in this category.',
                 inline=False
             )
         await interaction.response.send_message(embed=embed)
@@ -122,6 +122,7 @@ class commander(commands.Cog):
             database.commit()
             await interaction.response.send_message('You have been signed up for notifications!', ephemeral=True)
             print(f'{interaction.user} ({interaction.user.id}) signed up for notifications.')
+            return None
         else:
             if result[0] == 1:
                 cursor.execute('UPDATE notif SET status = 0 WHERE user_id = ?', (interaction.user.id,))
@@ -133,6 +134,8 @@ class commander(commands.Cog):
                 database.commit()
                 await interaction.response.send_message('You have been re-subscribed to notifications!', ephemeral=True)
                 print(f'{interaction.user} ({interaction.user.id}) re-subscribed to notifications.')
+            return None
+
 
 async def setup(client):
     await client.add_cog(commander(client))
