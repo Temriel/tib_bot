@@ -2,8 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from typing import Optional
-import re
-from tib_utility.db_utils import cursor, database
+from tib_utility.db_utils import cursor, database, CANVAS_REGEX
 import tib_utility.config as config
 
 owner_id = config.owner()
@@ -26,7 +25,7 @@ def bot_commands(existing_commands, parent_name=''):
             command_list.append((f'/{full_name}', description))
     return command_list
 
-class commander(commands.Cog):
+class Commander(commands.Cog):
     def __init__(self, client):
         self.client = client
 
@@ -91,7 +90,7 @@ class commander(commands.Cog):
         displayed = display.value if display else 'final'
         await interaction.response.defer(ephemeral=False, thinking=True)
         try:
-            if not re.fullmatch(r'^(?![cC])[a-z0-9]{1,4}+$', canvas):
+            if not CANVAS_REGEX.fullmatch(canvas):
                 await interaction.followup.send('Invalid format, canvases may not begin with c.', ephemeral=True)
                 return
             filename = f'canvas-{canvas}_{displayed}.png'
@@ -109,8 +108,8 @@ class commander(commands.Cog):
                 print(f'An error occurred: {e}')
                 
     @app_commands.command(name='notify-me', description='Sign up for DM notifications when Tib is updated with new canvases (run again to unsubscribe).')
-    async def notfications(self, interaction: discord.Interaction):
-        """Command to add users to DB for DM notifcations"""
+    async def notifications(self, interaction: discord.Interaction):
+        """Command to add users to DB for DM notifications"""
         try:
             cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (interaction.user.id,))
         except Exception as e:
@@ -138,4 +137,4 @@ class commander(commands.Cog):
 
 
 async def setup(client):
-    await client.add_cog(commander(client))
+    await client.add_cog(Commander(client))

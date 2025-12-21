@@ -11,7 +11,7 @@ import tib_utility.config as config
 from functools import lru_cache
 from pathlib import Path
 
-CANVAS_REGEX = re.compile(r'^(?![cC])[a-z0-9]{1,4}+$')
+CANVAS_REGEX = re.compile(r'^(?![cC])[a-z0-9]{1,4}$')
 KEY_REGEX = re.compile(r'(?=.*[a-z])[a-z0-9]{512}$')
 USERNAME_REGEX = re.compile(r'^[a-zA-Z0-9_-]{1,32}$')
 
@@ -631,7 +631,7 @@ class PlacemapAltView(discord.ui.View):
         else:
             embed = discord.Embed(
                 title='Error',
-                description='An error occured! Ping Temriel.',
+                description='An error occurred! Ping Temriel.',
                 color=discord.Color.red()
             )
             return embed, None
