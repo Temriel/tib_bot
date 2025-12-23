@@ -117,7 +117,8 @@ class LeaderboardView(discord.ui.View):
             embed.title = f"TPE Leaderboard, c{self.canvas}"
         else:
             embed.title = "TPE Leaderboard"
-        embed.description = f'Total pixels recorded: **{sum(total for _, total in self.all_pixels)}**'
+        embed.description = f"Total pixels recorded: **{sum(total for _, total in self.all_pixels)}**\n"
+        embed.description += f"Total users recorded: **{len(self.all_pixels)}**"
         embed.set_image(url="attachment://leaderboard.png")
         return embed, file
     
