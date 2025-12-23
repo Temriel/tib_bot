@@ -323,7 +323,7 @@ async def tpe_pixels_count_user(user_id: int, callback=None) -> dict:
                     continue
                 if entry.name.startswith(user_logs_constant) and entry.name.endswith('.log'):
                     found_user_logs.append(os.path.join(user_logs_dir, entry.name))
-    results: dict[int, dict] = {}
+    results: dict[Union[int, str], dict] = {}
     total = len(found_user_logs)
     for idx, user_log_file in enumerate(found_user_logs):
         basename = os.path.basename(user_log_file)
@@ -337,7 +337,7 @@ async def tpe_pixels_count_user(user_id: int, callback=None) -> dict:
         else:
             print(f'Processing c{canvas} ({idx + 1}/{total}) for user {user_id}')
         user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user_id}_pixels_c{canvas}.log'
-        await find_tpe_stats(canvas, ple_dir, results, user_id, user_log_file)
+        await find_tpe_stats(canvas, ple_dir, results, user_id, user_log_file, result_key=canvas)
     return results
 
 
@@ -360,7 +360,7 @@ async def tpe_pixels_count_canvas(canvas: str, callback=None) -> dict:
                 if entry.name.lower().endswith(canvas_logs_constant):
                     found_user_logs.append(os.path.join(user_logs_dir, entry.name))
 
-    results: dict[int, dict] = {}
+    results: dict[Union[int, str], dict] = {}
     total = len(found_user_logs)
     for idx, user_log_file in enumerate(found_user_logs):
         basename = os.path.basename(user_log_file)
@@ -377,7 +377,7 @@ async def tpe_pixels_count_canvas(canvas: str, callback=None) -> dict:
     return results
 
 
-async def find_tpe_stats(canvas: str, ple_dir, results: dict[int, dict], user_id: int, user_log_file):
+async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], dict], user_id: int, user_log_file, result_key: Optional[Union[int, str]] = None):
     _, palette_path, _ = config.paths(canvas, user_id, 'normal')
     temp_pattern = os.path.join(ROOT_DIR, 'template', f'c{canvas}', '*.png')
     initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
@@ -385,7 +385,8 @@ async def find_tpe_stats(canvas: str, ple_dir, results: dict[int, dict], user_id
         total_pixels, undo, mod = await pixel_counting(user_log_file)
         tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path,
                                                         initial_canvas_path)
-        results[user_id] = {
+        key = result_key if result_key is not None else user_id
+        results[key] = {
             'total_pixels': total_pixels,
             'undo': undo,
             'tpe_pixels': tpe_pixels,
@@ -393,7 +394,8 @@ async def find_tpe_stats(canvas: str, ple_dir, results: dict[int, dict], user_id
         }
     except Exception as e:
         print(f'An error occurred while processing canvas {canvas} for user {user_id}: {e}')
-        results[user_id] = {'total_pixels': 0, 'undo': 0, 'tpe_pixels': 0, 'tpe_griefs': 0}
+        key = result_key if result_key is not None else user_id
+        results[key] = {'total_pixels': 0, 'undo': 0, 'tpe_pixels': 0, 'tpe_griefs': 0}
 
 
 async def generate_placemap(user: Union[discord.User, discord.Member], canvas: str) -> tuple[bool, dict]:
