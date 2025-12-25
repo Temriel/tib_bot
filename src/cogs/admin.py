@@ -6,32 +6,49 @@ import sqlite3
 import time
 import re
 import tib_utility.db_utils as db_utils
-from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, find_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX
+from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, \
+    find_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX, get_linked_pxls_username
+
 
 async def is_owner_check(interaction: discord.Interaction) -> bool:
-    """Check if the user is the owner of the bot."""
+    """Check if the user is the owner of the bot. Is usually used to return a function immediately."""
     return interaction.user.id == config.owner()
 
-class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
-    user_canvas = discord.ui.TextInput(label='userID, canvas', placeholder='uID,28,30a,59 OR 56a,uID1,uID2,uID3', style=discord.TextStyle.short, max_length=200)
+class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
+    user_canvas = discord.ui.TextInput(label='userID/name, canvas', placeholder='uID,28,30a,59 OR 56a,uID1,uID2,uID3', style=discord.TextStyle.short, max_length=200)
     key = discord.ui.TextInput(label='Log keys (512 char each)', placeholder='key1,key2,key3,key4,key5,key6', style=discord.TextStyle.paragraph, max_length=4000)
 
     async def on_submit(self, interaction: discord.Interaction):
+        def resolve_name(identifier: str):
+            if identifier.isdigit() and len(identifier) > 16:
+                return int(identifier)
+            linked_id = get_linked_pxls_username(identifier)
+            if linked_id:
+                return int(linked_id)
+            return None
+
         query = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)"
         query_user = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
         try:
             if not await is_owner_check(interaction):
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
                 return
+
             user_canvases = [x.strip() for x in self.user_canvas.value.split(',')]
             keys = [x.strip() for x in self.key.value.split(',')]
             if len(user_canvases) < 2:
                 await interaction.response.send_message('You must provide a user ID and at least one canvas.', ephemeral=True)
                 return
+
+            first_item = user_canvases[0]
+            is_canvas_many = not CANVAS_REGEX.fullmatch(first_item)
             
-            if len(user_canvases[0]) > 4: # one user, multiple canvases
-                user_id = int(user_canvases[0])
+            if is_canvas_many: # one user, multiple canvases
+                user_input = user_canvases[0]
                 canvases = user_canvases[1:]
+                user_id = resolve_name(user_input)
+                if not user_id:
+                    await interaction.response.send_message(f'Could not find a linked name for {user_input}. Are you sure you typed it correctly or that they\'re linked?', ephemeral=True)
                 if len(keys) != len(canvases):
                     await interaction.response.send_message('The number of keys must match the number of canvases.', ephemeral=True)
                     return
@@ -60,14 +77,15 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                 
             else: # one canvas, multiple users
                 canvas = user_canvases[0]
-                user_ids = user_canvases[1:]
-                if len(keys) != len(user_ids):
+                user_inputs = user_canvases[1:]
+                if len(keys) != len(user_inputs):
                     await interaction.response.send_message('The number of keys must match the number of canvases.', ephemeral=True)
                     return
                 success = []
                 fail = []
-                for user_id, key in zip(user_ids, keys):
-                    if not re.fullmatch(r'\d{17,}', user_id):
+                for user_input, key in zip(user_inputs, keys):
+                    user_id = resolve_name(user_input)
+                    if not user_id:
                         fail.append(f'<@{user_id}> ({user_id}), Invalid user ID format')
                         continue
                     if not KEY_REGEX.fullmatch(key):
@@ -79,9 +97,9 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                         database.commit()
                         success.append(f'<@{user_id}> ({user_id})')
                     except sqlite3.OperationalError as e:
-                        fail.append(f'{user_id}, SQLite error: {e}')
+                        fail.append(f'{user_input}, SQLite error: {e}')
                     except Exception as e:
-                        fail.append(f'{user_id}, Error: {e}')
+                        fail.append(f'{user_input}, Error: {e}')
                 message = f'c{canvas} now has logkeys for: {', '.join(success)}'
                 if fail:
                     message += f'\nFailed for users: {', '.join(fail)}'
@@ -91,7 +109,7 @@ class placemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
             print(f'An error occurred: {e}')
 
 
-class Admin(commands.Cog):
+class Admin(commands.Cog): # this is for the actual Discord commands part
     def __init__(self, client):
         self.client = client
         self.owner_id = config.owner()
@@ -170,7 +188,7 @@ class Admin(commands.Cog):
                 if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
                     await update_channel.send(f'**{user}** should now be **{new_rank}**. They have **{new_total}** pixels placed.')
                 else:
-                    print(f'Does not work for {type(update_channel)}. If this error still peresists, double check the channel ID in config.py, and that the bot has access to it')
+                    print(f'Does not work for {type(update_channel)}. If this error still persists, double check the channel ID in config.py, and that the bot has access to it')
             await interaction.response.send_message(f"Added {pixels} pixels for {user} on c{canvas}!")
             print (f"Added {pixels} pixels for {user} on canvas {canvas}")
         except Exception as e:
@@ -210,7 +228,7 @@ class Admin(commands.Cog):
             if not await is_owner_check(interaction):
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
                 return
-            modal = placemapDBAddAdmin()
+            modal = PlacemapDBAddAdmin()
             await interaction.response.send_modal(modal)
 
         except Exception as e:
