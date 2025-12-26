@@ -4,7 +4,7 @@ import csv
 import os
 import re
 import time
-from typing import Union, Optional
+from typing import Union, Optional, Callable
 import discord
 from PIL import Image
 import tib_utility.config as config
@@ -48,6 +48,15 @@ def get_linked_pxls_username(pxls_username: str):
     cursor.execute(query, (pxls_username,))
     result = cursor.fetchone()
     return result[0] if result else None
+
+
+async def resolve_name(identifier: str) -> int | None:
+    if identifier.isdigit() and len(identifier) > 16:
+        return int(identifier)
+    linked_id = get_linked_pxls_username(identifier)
+    if linked_id:
+        return int(linked_id)
+    return None
 
 
 def get_stats(pxls_username: str) -> dict:

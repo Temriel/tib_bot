@@ -7,7 +7,7 @@ import time
 import re
 import tib_utility.db_utils as db_utils
 from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, \
-    find_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX, get_linked_pxls_username
+    find_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX, resolve_name
 
 
 async def is_owner_check(interaction: discord.Interaction) -> bool:
@@ -19,15 +19,7 @@ class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
     key = discord.ui.TextInput(label='Log keys (512 char each)', placeholder='key1,key2,key3,key4,key5,key6', style=discord.TextStyle.paragraph, max_length=4000)
 
     async def on_submit(self, interaction: discord.Interaction):
-        def resolve_name(identifier: str):
-            if identifier.isdigit() and len(identifier) > 16:
-                return int(identifier)
-            linked_id = get_linked_pxls_username(identifier)
-            if linked_id:
-                return int(linked_id)
-            return None
-
-        query = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)"
+        query_logkey = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)"
         query_user = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
         try:
             if not await is_owner_check(interaction):
@@ -62,7 +54,7 @@ class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                         fail.append(f'c{canvas}, Invalid key format')
                         continue
                     try:
-                        cursor.execute(query, (user_id, canvas, key))
+                        cursor.execute(query_logkey, (user_id, canvas, key))
                         cursor.execute(query_user, (user_id,))
                         database.commit()
                         success.append(f'c{canvas}')
@@ -84,7 +76,7 @@ class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                 success = []
                 fail = []
                 for user_input, key in zip(user_inputs, keys):
-                    user_id = resolve_name(user_input)
+                    user_id = await resolve_name(user_input)
                     if not user_id:
                         fail.append(f'<@{user_id}> ({user_id}), Invalid user ID format')
                         continue
@@ -92,7 +84,7 @@ class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                         fail.append(f'<@{user_id}> ({user_id}), Invalid key format')
                         continue
                     try:
-                        cursor.execute(query, (int(user_id), canvas, key))
+                        cursor.execute(query_logkey, (int(user_id), canvas, key))
                         cursor.execute(query_user, (user_id,))
                         database.commit()
                         success.append(f'<@{user_id}> ({user_id})')
