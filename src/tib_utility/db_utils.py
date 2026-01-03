@@ -34,6 +34,16 @@ database.execute('CREATE TABLE IF NOT EXISTS logkey(user INT, canvas STR, key ST
 semaphore = asyncio.Semaphore(3)
 
 
+def db_shutdown():
+    try:
+        cursor.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+        database.commit()
+        database.close()
+        print('DB synced. Goodbye')
+    except Exception as e:
+        print(f'Error during DB shutdown: {e}')
+
+
 def get_linked_discord_username(user_id: int):
     """Get the linked Pxls username for a given Discord user ID."""
     query = "SELECT username FROM users WHERE user_id = ?"

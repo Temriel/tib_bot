@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import logging
 import tib_utility.config as config
 import tib_utility.db_utils as db_utils
+from tib_utility.db_utils import db_shutdown
 import importlib
 
 load_dotenv()
@@ -27,9 +28,16 @@ async def load():
     for filename in os.listdir('./cogs'):
         if filename.endswith('.py'):
             try:
-                await bot.load_extension(f'cogs.{filename[:-3]}')
+                await bot.load_extension(f'cogs.{filename[:-3]}') # :-3 literally just strips the last three characters on the file name, which is .py
             except Exception as e:
                 print(f'Failed to load {filename[:-3]}: {e}')
+
+
+bot_close = bot.close
+async def cleanup():
+    db_utils.db_shutdown() # make sure files r sycned properly
+    await bot_close()
+bot.close = cleanup
                 
 # all commands in this file are just for making sure the bot Actually Works
 @tree.command(name='shutdown', description='Shut down the bot (ADMIN ONLY)')

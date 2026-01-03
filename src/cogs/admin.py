@@ -158,7 +158,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
     @app_commands.describe(user='The user to add pixels to.', canvas='Canvas number (no c).', pixels='Amount placed.')
     async def pixels_db_add(self, interaction: discord.Interaction, user: str, canvas: str, pixels: int):
         """Add pixels to a user in the database. Needed values are user, canvas & pixels."""
-        query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)"
+        query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)" # the reason we define query is to make sure cursor.execute isn't Huge
         try:
             if not await is_owner_check(interaction):
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
@@ -168,21 +168,27 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             if not CANVAS_REGEX.fullmatch(canvas):
                 await interaction.response.send_message("Invalid format! A canvas code can only contain a-z and 0-9.", ephemeral=True)
                 return
-            prev_stats = get_stats(user)
+            prev_stats = get_stats(user) # so we can check for rank changes
             prev_rank = prev_stats['rank']
-            cursor.execute(query, (str(user), canvas, pixels)) # the reason we define query is to make sure cursor.execute isn't Huge
+            cursor.execute(query, (str(user), canvas, pixels))
             database.commit()
             new_stats = get_stats(user)
             new_total = new_stats['total']
             new_rank = new_stats['rank']
             if prev_rank != new_rank:
+                if new_rank == "griefer":
+                    new_rank = "a griefer" # so the update_channel message makes more sense 
                 update_channel = interaction.client.get_channel(self.update_channel_id)
                 if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
                     await update_channel.send(f'**{user}** should now be **{new_rank}**. They have **{new_total}** pixels placed.')
                 else:
                     print(f'Does not work for {type(update_channel)}. If this error still persists, double check the channel ID in config.py, and that the bot has access to it')
-            await interaction.response.send_message(f"Added {pixels} pixels for {user} on c{canvas}!")
-            print (f"Added {pixels} pixels for {user} on canvas {canvas}")
+            if pixels >= 0:
+                status = "Added"
+            else:
+                status = "Removed"
+            await interaction.response.send_message(f"{status} {pixels} pixels for {user} on c{canvas}!")
+            print (f"{status} {pixels} pixels for {user} on canvas {canvas}")
         except Exception as e:
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
