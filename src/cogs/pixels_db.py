@@ -107,19 +107,22 @@ class LeaderboardView(discord.ui.View):
         # draw border (last)
         draw.rectangle([0, 0, image_width - 1, image_height - 1], outline=border_color, width=2)
 
+        embed = discord.Embed(color=discord.Color.purple()) # moved here so the canvas check is only done once
         with io.BytesIO() as image_binary: # below sends the embed w/ the image
             image.save(image_binary, 'PNG')
             image_binary.seek(0)
-            file = discord.File(fp=image_binary, filename='leaderboard.png')
-
-        embed = discord.Embed(color=discord.Color.purple())
-        if self.canvas:
-            embed.title = f"TPE Leaderboard, c{self.canvas}"
-        else:
-            embed.title = "TPE Leaderboard"
+            
+            if self.canvas:
+                file = discord.File(fp=image_binary, filename=f'c{self.canvas}_leaderboard.png')
+                embed.set_image(url=f"attachment://c{self.canvas}_leaderboard.png")
+                embed.title = f"TPE c{self.canvas} Leaderboard"
+            else:
+                file = discord.File(fp=image_binary, filename='alltime_leaderboard.png')
+                embed.set_image(url="attachment://alltime_leaderboard.png")
+                embed.title = "TPE all-time Leaderboard"
+                
         embed.description = f"Total pixels recorded: **{sum(total for _, total in self.all_pixels)}**\n"
         embed.description += f"Total users recorded: **{len(self.all_pixels)}**"
-        embed.set_image(url="attachment://leaderboard.png")
         return embed, file
     
     @discord.ui.button(label='Prev', style=discord.ButtonStyle.primary, custom_id='ldb_previous')
