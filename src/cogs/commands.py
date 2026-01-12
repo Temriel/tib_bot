@@ -101,8 +101,8 @@ class Commander(commands.Cog):
             await interaction.followup.send(embed=embed, file=file)
             print(f'Sending canvas {canvas}, {displayed}')
         except Exception as e:
-            if canvas  in ['6','17','28','30a']:
-                await interaction.followup.send('Log files are... weird for c6, c17, c28, and c30a, and thus final images are not available.', ephemeral=True)
+            if canvas in ['6','17','28','30a']:
+                await interaction.followup.send('Log files are... weird for c6, c17, c28, and c30a, and thus final images are not available. Try checking https://archives.pxls.space', ephemeral=True)
             else: 
                 await interaction.followup.send(f'No log files available.', ephemeral=True)
                 print(f'An error occurred: {e}')
