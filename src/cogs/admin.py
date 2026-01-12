@@ -131,10 +131,10 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
 
-    @group.command(name='unlink', description='Unink a Pxls username from a Discord user (ADMIN ONLY).')
+    @group.command(name='unlink', description='Unlink a Pxls username from a Discord user (ADMIN ONLY).')
     @app_commands.describe(username='The Pxls username to unlink.')
     async def pixels_db_unlink(self, interaction: discord.Interaction, username: str):
-        """Unink a Pxls username from a Discord user."""
+        """Unlink a Pxls username from a Discord user."""
         query = "UPDATE users SET username = NULL WHERE username = ?"
         if not re.fullmatch(r'^[a-zA-Z0-9_-]{1,32}$', username):
             await interaction.response.send_message('Invalid username', ephemeral=True)
@@ -193,7 +193,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
 
-    @group.command(name='notfy-users', description='Notify all users who signed up for notifications about a new canvas (ADMIN ONLY).')
+    @group.command(name='notify-users', description='Notify all users who signed up for notifications about a new canvas (ADMIN ONLY).')
     async def notifications_admin(self, interaction: discord.Interaction):
         """Notify all users who signed up for notifications about a new canvas (ADMIN ONLY)."""
         if not await is_owner_check(interaction):

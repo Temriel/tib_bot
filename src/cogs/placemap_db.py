@@ -11,7 +11,7 @@ from tib_utility.db_utils import cursor, database, generate_placemap, find_pxls_
 
 owner_id = config.owner()
         
-class placemapDBAdd(discord.ui.Modal, title='Add your log key.'):
+class PlacemapDBAdd(discord.ui.Modal, title='Add your log key.'):
     canvas = discord.ui.TextInput(label='Canvas Number', placeholder='Add canvas number (eg, 28 or 56a).', max_length=4, min_length=1)
     key = discord.ui.TextInput(label='Log key (512 char)', style=discord.TextStyle.paragraph, max_length=512, min_length=512)
     
@@ -47,7 +47,7 @@ class placemapDBAdd(discord.ui.Modal, title='Add your log key.'):
 ##############################
 
 async def open_modal(interaction: discord.Interaction):
-    modal = placemapDBAdd()
+    modal = PlacemapDBAdd()
     await interaction.response.send_modal(modal)
 
 

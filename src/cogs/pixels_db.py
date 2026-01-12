@@ -1,12 +1,12 @@
 import discord
-from discord import app_commands
+from discord import app_commands, Interaction
 from discord.ext import commands
 import os
 from PIL import Image, ImageDraw, ImageFont
 import time
 import io
-from tib_utility.db_utils import cursor, get_linked_discord_username, get_linked_pxls_username, get_stats, CANVAS_REGEX, KEY_REGEX, USERNAME_REGEX
-from typing import Union, Optional
+from tib_utility.db_utils import cursor, get_linked_discord_username, get_linked_pxls_username, get_stats, CANVAS_REGEX, USERNAME_REGEX
+from typing import Optional
 
 def create_pages(items: list, page: int, page_size: int = 30):
     """Function to determine the amount of pages & what goes where."""
@@ -124,7 +124,16 @@ class LeaderboardView(discord.ui.View):
         embed.description = f"Total pixels recorded: **{sum(total for _, total in self.all_pixels)}**\n"
         embed.description += f"Total users recorded: **{len(self.all_pixels)}**"
         return embed, file
-    
+
+
+    async def pages_embed(self, interaction: Interaction, start_time: float):
+        embed, file = self.generate_embed()
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        embed.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {self.current_page}/{self.total_pages}')
+        await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
+
+
     @discord.ui.button(label='Prev', style=discord.ButtonStyle.primary, custom_id='ldb_previous')
     async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         start_time = time.time()
@@ -132,11 +141,8 @@ class LeaderboardView(discord.ui.View):
             self.current_page -= 1
         else: 
             self.current_page = 1
-        embed, file = self.generate_embed()
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        embed.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {self.current_page}/{self.total_pages}')
-        await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
+        await self.pages_embed(interaction, start_time)
+
 
     @discord.ui.button(label='Next', style=discord.ButtonStyle.primary, custom_id='ldb_next')
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -145,13 +151,10 @@ class LeaderboardView(discord.ui.View):
             self.current_page += 1
         else: 
             self.current_page = 1
-        embed, file = self.generate_embed()
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        embed.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {self.current_page}/{self.total_pages}')
-        await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
+        await self.pages_embed(interaction, start_time)
 
-class db(commands.Cog):
+
+class Database(commands.Cog):
     def __init__(self, client):
         self.client = client
 
@@ -163,8 +166,6 @@ class db(commands.Cog):
     @app_commands.describe(pxlsuser='Pxls username to look up.', discorduser='Discord username to look up.')
     async def pixels_db_lookup(self, interaction: discord.Interaction, pxlsuser: Optional[str] = None, discorduser: Optional[discord.User] = None):
         """Find the total pixel count for a user & their rank (defined in config.py)"""
-        internal_pxls_username: Optional[str] = None # what exists in the db
-        internal_discord_user: Optional[Union[discord.User, discord.Member]] = None # same here
         # both provided, treat like only pxlsuser
         if pxlsuser and discorduser or pxlsuser:
             if not USERNAME_REGEX.fullmatch(pxlsuser):
@@ -215,12 +216,12 @@ class db(commands.Cog):
         all_pixels = cursor.fetchall() # defines all_pixels to be the thing we got from the database
         if not all_pixels:
             await interaction.response.send_message('No pixels or users found.')
-            return # self explanatory but if "all_pixels" is empty it returns this. I love error handling :3  
+            return # self-explanatory but if "all_pixels" is empty it returns this. I love error handling :3
         all_pixels = [(str(user), total_all) for user, total_all in all_pixels]
 
-        COG_DIR = os.path.dirname(os.path.abspath(__file__))
-        SRC_DIR = os.path.dirname(COG_DIR) 
-        font_path = os.path.join(SRC_DIR, "font.ttf") # can be any, as long as it's in the main folder 
+        cog_dir = os.path.dirname(os.path.abspath(__file__))
+        src_dir = os.path.dirname(cog_dir)
+        font_path = os.path.join(src_dir, "font.ttf") # can be any, as long as it's in the main folder
         font_size = 24
         page_size = 30
 
@@ -232,4 +233,4 @@ class db(commands.Cog):
         await interaction.response.send_message(embed=embed, file=file, view=view)
 
 async def setup(client):
-    await client.add_cog(db(client))
+    await client.add_cog(Database(client))

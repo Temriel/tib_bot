@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 import logging
 import tib_utility.config as config
 import tib_utility.db_utils as db_utils
-from tib_utility.db_utils import db_shutdown
 import importlib
 
 load_dotenv()
@@ -35,7 +34,7 @@ async def load():
 
 bot_close = bot.close
 async def cleanup():
-    db_utils.db_shutdown() # make sure files r sycned properly
+    db_utils.db_shutdown() # make sure files are synced properly
     await bot_close()
 bot.close = cleanup
                 

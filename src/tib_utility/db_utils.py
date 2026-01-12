@@ -4,7 +4,7 @@ import csv
 import os
 import re
 import time
-from typing import Union, Optional, Callable
+from typing import Union, Optional
 import discord
 from PIL import Image
 import tib_utility.config as config
