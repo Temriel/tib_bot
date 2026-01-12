@@ -160,32 +160,28 @@ class db(commands.Cog):
         print('Pixels cog loaded.')
 
     @app_commands.command(name='lookup', description='See how many pixels a certain user has placed for us.')
-    @app_commands.describe(pxls_username='Pxls username to look up.', discord_user='Discord username to look up.')
-    async def pixels_db_lookup(self, interaction: discord.Interaction, pxls_username: Optional[str] = None, discord_user: Optional[discord.User] = None):
+    @app_commands.describe(pxlsuser='Pxls username to look up.', discorduser='Discord username to look up.')
+    async def pixels_db_lookup(self, interaction: discord.Interaction, pxlsuser: Optional[str] = None, discorduser: Optional[discord.User] = None):
         """Find the total pixel count for a user & their rank (defined in config.py)"""
         internal_pxls_username: Optional[str] = None # what exists in the db
         internal_discord_user: Optional[Union[discord.User, discord.Member]] = None # same here
-        # both provided 
-        if pxls_username and discord_user:
-            await interaction.response.send_message('Please provide either a Pxls username or a Discord user, not both.', ephemeral=True)
-            return
-        # only pxls username, finds discord if any 
-        elif pxls_username:
-            if not USERNAME_REGEX.fullmatch(pxls_username):
+        # both provided, treat like only pxlsuser
+        if pxlsuser and discorduser or pxlsuser:
+            if not USERNAME_REGEX.fullmatch(pxlsuser):
                 await interaction.response.send_message('Invalid username', ephemeral=True)
                 return
-            internal_pxls_username = pxls_username
+            internal_pxls_username = pxlsuser
             linked_discord = get_linked_pxls_username(internal_pxls_username)
             if not linked_discord:
                 internal_discord_user = None
             else: 
                 internal_discord_user = await interaction.client.fetch_user(linked_discord)
         # only discord user, errors if no pxls username
-        elif discord_user:
-            internal_pxls_username = get_linked_discord_username(discord_user.id)
-            internal_discord_user = discord_user
+        elif discorduser:
+            internal_pxls_username = get_linked_discord_username(discorduser.id)
+            internal_discord_user = discorduser
             if not internal_pxls_username:
-                await interaction.response.send_message(f'{discord_user} does not have a linked Pxls username (yet)', ephemeral=True)
+                await interaction.response.send_message(f'{discorduser} does not have a linked Pxls username (yet)', ephemeral=True)
                 return
         # no arguments provided, uses interaction user (errors again if no pxls username)
         else:
