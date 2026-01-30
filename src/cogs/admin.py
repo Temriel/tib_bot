@@ -5,6 +5,7 @@ import tib_utility.config as config
 import sqlite3
 import time
 import re
+import asyncio
 import tib_utility.db_utils as db_utils
 from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, \
     find_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX, resolve_name
@@ -196,28 +197,33 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
     @group.command(name='notify-users', description='Notify all users who signed up for notifications about a new canvas (ADMIN ONLY).')
     async def notifications_admin(self, interaction: discord.Interaction):
         """Notify all users who signed up for notifications about a new canvas (ADMIN ONLY)."""
+        await interaction.response.defer(ephemeral=True)
         if not await is_owner_check(interaction):
-            await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+            await interaction.followup.send("You do not have permission to use this command :3", ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=False,thinking=True)
         cursor.execute('SELECT user_id FROM notif WHERE status = 1')
         users_to_notify = cursor.fetchall()
-        notified_count = 0
-        for (user_id,) in users_to_notify:
-            user = self.client.get_user(user_id)
-            if user is None:
+        if not users_to_notify:
+            await interaction.followup.send('No users to notify.', ephemeral=True)
+            return
+        async def notifying_users(users):
+            notified_count = 0
+            for (user_id,) in users:
                 try:
-                    user = await self.client.fetch_user(user_id)
-                except Exception as e:
-                    print(f'Failed to fetch user {user_id}: {e}')
-                    continue
-            if user:
-                try:
-                    await user.send('Tib now has the latest canvas in its DB, you can now create placemaps as you wish.')
-                    notified_count += 1
+                    user = self.client.get_user(user_id)
+                    if user is None:
+                        user = await self.client.fetch_user(user_id)
+                    if user:
+                        await user.send('Tib now has the latest canvas in its DB, you can now create placemaps as you wish.')
+                        notified_count += 1
+                        await asyncio.sleep(0.1)
+                except discord.Forbidden:
+                    print(f'Cannot send message to user {user_id}, they might have DMs disabled')
                 except Exception as e:
                     print(f'Failed to notify user {user_id}: {e}')
-        await interaction.followup.send(f'Notified {notified_count} users.', ephemeral=True)
+            print(F"Notified {notified_count}/{len(users)} users")
+        self.client.loop.create_task(notifying_users(users_to_notify))
+        await interaction.followup.send(f'Notifying {len(users_to_notify)} users.', ephemeral=True)
 
     @group.command(name='force-add', description='Force add a logkey for a user (ADMIN ONLY).') 
     async def placemap_db_add_admin(self, interaction: discord.Interaction):
