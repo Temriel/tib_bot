@@ -188,6 +188,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 status = "Added"
             else:
                 status = "Removed"
+                pixels = abs(pixels)
             await interaction.response.send_message(f"{status} {pixels} pixels for {user} on c{canvas}!")
             print (f"{status} {pixels} pixels for {user} on canvas {canvas}")
         except Exception as e:
