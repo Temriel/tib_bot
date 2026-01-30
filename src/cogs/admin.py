@@ -38,7 +38,7 @@ class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
             if is_canvas_many: # one user, multiple canvases
                 user_input = user_canvases[0]
                 canvases = user_canvases[1:]
-                user_id = resolve_name(user_input)
+                user_id = await resolve_name(user_input)
                 if not user_id:
                     await interaction.response.send_message(f'Could not find a linked name for {user_input}. Are you sure you typed it correctly or that they\'re linked?', ephemeral=True)
                 if len(keys) != len(canvases):
