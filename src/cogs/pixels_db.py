@@ -140,7 +140,7 @@ class LeaderboardView(discord.ui.View):
         if self.current_page > 1:
             self.current_page -= 1
         else: 
-            self.current_page = 1
+            self.current_page = self.total_pages
         await self.pages_embed(interaction, start_time)
 
 
@@ -200,7 +200,7 @@ class Database(commands.Cog):
             await interaction.response.send_message(f"**{internal_pxls_username}** has placed **{total}** pixels for us. They have the rank of **{rank}**.")
 
     @app_commands.command(name='list', description='See how much people have placed for us.')
-    @app_commands.describe(canvas='Canvas code to filter by (no c).')
+    @app_commands.describe(canvas='Canvas code to filter by (no leading c).')
     async def pixels_db_list(self, interaction: discord.Interaction, canvas: Optional[str] = None):
         """Create a user leaderboard."""
         start_time = time.time()

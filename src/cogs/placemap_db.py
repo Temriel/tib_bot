@@ -34,7 +34,7 @@ class PlacemapDBAdd(discord.ui.Modal, title='Add your log key.'):
             await interaction.response.send_message(f'Added key for canvas {self.canvas.value}!', ephemeral=True)
             return
         except sqlite3.OperationalError as e:
-            await interaction.response.send_message('Error! Something went wrong, ping Temriel.', ephemeral=True)
+            await interaction.response.send_message('Error! Something with the DB went wrong, ping Temriel.', ephemeral=True)
             print(f'An SQLite3 error occurred: {e}')
             return
         except Exception as e:
