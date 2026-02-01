@@ -234,7 +234,7 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
 
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple[
     int, int]:
-    """Find the amount of pixels placed for TPE on a specified canvas using template images. Handles virgin pixels."""
+    """Find the amount of pixels placed for TPE on a specified canvas using template images."""
     palette_rgb = [tuple(c) for c in await gpl_palette(palette_path)]
     if not palette_rgb:
         return 0, 0
@@ -294,38 +294,39 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
             is_virgin = False
             present = False
             try:
-                initial_canvas_rgb = initial_canvas[x, y]
+                initial_canvas_rgb = initial_canvas[x, y] # for virgin
             except IndexError:
                 continue
             for tpe_image in template_map:
                 try:
-                    tpe_image_rgb = tpe_image[x, y]
+                    tpe_image_rgb = tpe_image[x, y] # for tpe check
                 except IndexError:
                     continue
                 # palette check
                 if not isinstance(tpe_image_rgb, (tuple, list)) or len(tpe_image_rgb) < 4:
                     continue
                 r, g, b, a = tpe_image_rgb
-                if a == 0:
+                if a == 0: # ignore pixels if transparent (not on template)
                     continue
-                present = True
+                present = True # confirms the pixel is in the template area
                 target_rgb = (r, g, b)
                 if placed_rgb == target_rgb:  # correct pixel
                     is_correct = True
                     break
                 if target_rgb == initial_canvas_rgb:  # virgin pixel
                     is_virgin = True
-            if is_correct or is_virgin:
+            if is_correct or is_virgin: # since it passed the for loop, add as correct
                 tpe_place[coord] = tpe_place.get(coord, 0) + 1
                 tpe_grief.pop(coord, None)
-            elif present and not is_correct:
+            elif present and not is_correct: # fails is_correct check, fails is_virgin check, but is present, thus it's a grief
                 tpe_grief[coord] = tpe_grief.get(coord, 0) + 1
                 tpe_place.pop(coord, None)
     tpe_pixels = sum(tpe_place.values())
     tpe_griefs = sum(tpe_grief.values())
-    return tpe_pixels - tpe_griefs, tpe_griefs
+    return tpe_pixels - tpe_griefs, tpe_griefs # I return tpe_pxiels - tpe_griefs so I don't have to do that math everywhere else lol
 
-
+# honestly this one and the following functions COULD be merged... probably. like they do almost the same thing but slightly differently.
+# maybe I can fix that via {{user_id}_pixels_c if user_id else _pixels_c{canvas}} but idk if that even WORKS
 async def tpe_pixels_count_user(user_id: int, callback=None) -> dict:
     """Finds how many pixels a user has placed on all recorded TPE canvases using user logfiles."""
     ple_dir = config.pxlslog_explorer_dir
@@ -397,6 +398,7 @@ async def tpe_pixels_count_canvas(canvas: str, callback=None) -> dict:
 
 
 async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], dict], user_id: int, user_log_file, result_key: Optional[Union[int, str]] = None):
+    """Thank you PyCharm for just Making This Work lol"""
     _, palette_path, _ = config.paths(canvas, user_id, 'normal')
     temp_pattern = os.path.join(ROOT_DIR, 'template', f'c{canvas}', '*.png')
     initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
@@ -404,7 +406,7 @@ async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], di
         total_pixels, undo, mod = await pixel_counting(user_log_file)
         tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path,
                                                         initial_canvas_path)
-        key = result_key if result_key is not None else user_id
+        key = result_key if result_key is not None else user_id # to make it work for both functions
         results[key] = {
             'total_pixels': total_pixels,
             'undo': undo,
@@ -423,14 +425,17 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         filter_start_time = time.time()
         get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
         ple_dir = config.pxlslog_explorer_dir
+        logfile = f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log'
         cursor.execute(get_key, (canvas, user.id))  # does the above
         user_key = cursor.fetchone()
         mode = 'normal'
         _, palette_path, _ = config.paths(canvas, user.id, mode)
 
         if not CANVAS_REGEX.fullmatch(canvas):
-            return False, {
-                'error': f'Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.'}
+            return False, {'error': f'Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.'}
+
+        if not os.path.exists(logfile): 
+            return False, {'error': f'No log file found. Either invalid canvas or the logs haven\'t been added yet.'}
 
         if not user_key:
             return False, {'error': f'No log key found for this canvas.'}
@@ -444,8 +449,8 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
             return False, {'error': f'Invalid format! A log key can only contain a-z, and 0-9.'}
 
         user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
-        filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log',
-                      f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log', '--output', user_log_file]
+        filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', logfile,
+                      '--output', user_log_file]
         filter_result = await asyncio.create_subprocess_exec(
             *filter_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
@@ -513,13 +518,13 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
             'mod': mod,  # mod overwrites, not included in total_pixels & is almost always 0
             'active_x': active_x,
             'active_y': active_y,
-            'active_count': active_count,
+            'active_count': active_count, # most active pixel (& num placements there)
             'survived': survived,  # pixels that are the same as the "final" state of the canvas
             'survived_perc': survived_perc,  # above but % form
             'replaced_user': replaced_user,  # pixels replaced by self
             'replaced_other': replaced_other,  # pixels replaced by others
             'tpe_pixels': tpe_pixels,  # for tpe - griefs
-            'tpe_griefs': tpe_griefs,  # not always accurate
+            'tpe_griefs': tpe_griefs,  # just griefs. not always accurate
             'filename': filename,
             'output_path': output_path,
             'user_log_file': user_log_file,
