@@ -176,12 +176,13 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             new_stats = get_stats(user)
             new_total = new_stats['total']
             new_rank = new_stats['rank']
+            new_group  = new_stats['group']
             if prev_rank != new_rank:
                 if new_rank == "griefer":
                     new_rank = "a griefer" # so the update_channel message makes more sense 
                 update_channel = interaction.client.get_channel(self.update_channel_id)
                 if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
-                    await update_channel.send(f'**{user}** should now be **{new_rank}**. They have **{new_total}** pixels placed.')
+                    await update_channel.send(f'**{user}** should now be part of **{new_group}** with the rank of **{new_rank}**. They have **{new_total}** pixels placed.')
                 else:
                     print(f'Does not work for {type(update_channel)}. If this error still persists, double check the channel ID in config.py, and that the bot has access to it')
             if pixels >= 0:

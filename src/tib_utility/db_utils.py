@@ -75,6 +75,7 @@ def get_stats(pxls_username: str) -> dict:
     cursor.execute(query, (pxls_username,))
     total = cursor.fetchone()[0] or 0
     rank = "nothing"
+    group = "nothing"
     if total is None:
         total = 0
     if total < 0:
@@ -84,7 +85,12 @@ def get_stats(pxls_username: str) -> dict:
         if total >= threshold:
             rank = name
             break
-    return {'total': total, 'rank': rank}
+    groups = config.rank_group()
+    for threshold, name in groups:
+        if total >= threshold:
+            group = name
+            break
+    return {'total': total, 'rank': rank, 'group': group}
 
 
 def get_all_users() -> list[tuple[int, str]]:

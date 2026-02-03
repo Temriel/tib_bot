@@ -194,10 +194,11 @@ class Database(commands.Cog):
         stats = get_stats(internal_pxls_username)
         total = stats['total']
         rank = stats['rank']
+        group = stats['group']
         if internal_discord_user:
-            await interaction.response.send_message(f"**{internal_discord_user}** (Pxls username: **{internal_pxls_username}**) has placed **{total}** pixels for us. They have the rank of **{rank}**.")
+            await interaction.response.send_message(f"**{internal_discord_user}** (Pxls username: **{internal_pxls_username}**) has placed **{total}** pixels for us. They are part of **{group}** with the rank of **{rank}**.")
         else:
-            await interaction.response.send_message(f"**{internal_pxls_username}** has placed **{total}** pixels for us. They have the rank of **{rank}**.")
+            await interaction.response.send_message(f"**{internal_pxls_username}** has placed **{total}** pixels for us. They are part of **{group}** with the rank of **{rank}**.")
 
     @app_commands.command(name='list', description='See how much people have placed for us.')
     @app_commands.describe(canvas='Canvas code to filter by (no leading c).')

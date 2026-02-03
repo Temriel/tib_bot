@@ -56,7 +56,7 @@ def get_palette(canvas: str):
             return 11
         case "61"|"62"|"63"|"64"|"64a"|"65"|"65a"|"66"|"67"|"67a"|"68"|"69"|"70"|"71"|"72"|"73"|"74"|"75":
             return 12
-        case "76"|"77"|"78"|"78a"|"79"|"80"|"81"|"82"|"83"|"84"|"85"|"86"|"87"|"88"|"88a"|"89"|"90"|"91"|"92"|"93"|"94"|"95"|"96"|"97": # longest palette ever, christ
+        case "76"|"77"|"78"|"78a"|"79"|"80"|"81"|"82"|"83"|"84"|"85"|"86"|"87"|"88"|"88a"|"89"|"90"|"91"|"92"|"93"|"94"|"95"|"96"|"97"|"98"|"99": # longest palette ever, christ
             return 13
         case "21a":
             return "gimmick_1"
@@ -95,8 +95,20 @@ def ranks():
         (100000, "General"),
         (75000, "Colonel"),
         (50000, "Major"),
-        (30000, "Sergeant Major"),
-        (15000, "Sergeant"),
+        (35000, "Sergeant Major"),
+        (25000, "First Sergeant"),
+        (17500, "Master Sergeant"),
+        (10000, "Sergeant"),
         (5000, "Corporal"),
         (1000, "Private"),
+    ]
+
+def rank_group():
+    """Grouping the above ranks."""
+    return [
+        (100000, "High Command"),
+        (50000, "Middle command"),
+        (25000, "Sergeant Command"),
+        (10000, "Lower Command"),
+        (1000, "Enlisted"),
     ]
