@@ -167,7 +167,8 @@ class Placemap(commands.Cog):
                     display = f'c{entry}'
                     if not entry[-1].isalpha():
                         display += ' '
-                    cells.append(f'`{display}`'.ljust(width))
+                    marker = ':purple_heart:' if config.tpe(entry) else ':black_heart:'
+                    cells.append(f'{marker}`{display}`'.ljust(width))
                 lines.append(''.join(cells))
             found_keys = "\n".join(lines)
             embed = discord.Embed(
