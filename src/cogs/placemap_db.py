@@ -134,6 +134,61 @@ class Placemap(commands.Cog):
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
             return
+    
+    @group.command(name='view', description='View your stored log keys.')
+    async def placemap_db_view(self, interaction: discord.Interaction):
+        """View stored logkeys"""
+        user = interaction.user
+        query = "SELECT canvas FROM logkey WHERE user = ? ORDER BY CAST(canvas AS INTEGER) DESC, canvas DESC"
+        try:
+            cursor.execute(query, (user.id,))
+            results = cursor.fetchall()
+            if not results:
+                await interaction.response.send_message('No log keys found for your user!', ephemeral=True)
+                return
+            canvases = [str(row[0]) for row in results]
+            cols = 4
+            rows_count = (len(canvases) + cols - 1) // cols
+            rows = []
+            for r in range(rows_count):
+                row = []
+                for c in range(cols):
+                    idx = r * cols + c
+                    row.append(canvases[idx] if idx < len(canvases) else '')
+                rows.append(row)
+            width = 16
+            lines = []
+            for row in rows:
+                cells = []
+                for entry in row:
+                    if not entry:
+                        cells.append(''.ljust(width))
+                        continue
+                    display = f'c{entry}'
+                    if not entry[-1].isalpha():
+                        display += ' '
+                    cells.append(f'`{display}`'.ljust(width))
+                lines.append(''.join(cells))
+            found_keys = "\n".join(lines)
+            embed = discord.Embed(
+                title=f'Your added log keys', 
+                description=found_keys,
+                color=discord.Color.purple()
+                )
+            embed.set_author(
+                name=user.name, 
+                icon_url=user.avatar.url if user.avatar else user.default_avatar.url
+                )
+            await interaction.response.send_message(embed=embed)
+            
+        except sqlite3.OperationalError as e:
+            await interaction.response.send_message('Error! Something with the DB went wrong, ping Temriel.', ephemeral=True)
+            print(f'An SQLite3 error occurred: {e}')
+            return
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, ping Temriel.', ephemeral=True)
+            print(f'An error occurred: {e}')
+            return
 
 async def setup(client):
     await client.add_cog(Placemap(client))

@@ -80,10 +80,17 @@ def paths(canvas: str, user: int, mode: str):
 
 def tpe(canvas: str):
     """All canvases TPE has been present on, for passing against images in /templates"""
-    tpe_canvas = [
-        "51", "52", "53", "54", "55", # before che
-        "57", "58", "59", "60", "61", "63", "66", "67", "68", "77", "78a", # during che
-        "81", "82", "83", "84", "85", "86", "87", "88", "88a", "89", "90", "91", "92", "93", "93a", "94", "95", "96", "97", "98", "99", "100"  # after che, expand with new canvases
+    tpe_canvas = [ # split 0-9 wise (see below)
+        # before che
+        "51", "52", "53", "54", "55", 
+        # during che
+        "57", "58", "59", 
+        "60", "61", "63", "66", "67", "68", 
+        "77", "78a", 
+        # after che, expand with new canvases
+        "81", "82", "83", "84", "85", "86", "87", "88", "88a", "89", 
+        "90", "91", "92", "93", "93a", "94", "95", "96", "97", "98", "99", 
+        "100"
         ]
     tpe_present = canvas.strip() in tpe_canvas
     return tpe_present
@@ -91,6 +98,11 @@ def tpe(canvas: str):
 def ranks():
     """A list of tuples for pixels required & associated rank."""
     return [
+        (1000000, "Arch-Overseer"),
+        (750000, "Grand Overseer"),
+        (500000, "Overseer"),
+        (350000, "Arch-Admiral"),
+        (225000, "Grand Admiral"),
         (150000, "Admiral"),
         (100000, "General"),
         (75000, "Colonel"),
@@ -107,7 +119,7 @@ def rank_group():
     """Grouping the above ranks."""
     return [
         (100000, "High Command"),
-        (50000, "Middle command"),
+        (50000, "Middle Command"),
         (25000, "Sergeant Command"),
         (10000, "Lower Command"),
         (1000, "Enlisted"),
