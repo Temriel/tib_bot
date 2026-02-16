@@ -133,7 +133,7 @@ class LeaderboardView(discord.ui.View):
         embed.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {self.current_page}/{self.total_pages}')
         await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
 
-
+    # noinspection PyTypeChecker
     @discord.ui.button(label='Prev', style=discord.ButtonStyle.primary, custom_id='ldb_previous')
     async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         start_time = time.time()
@@ -143,7 +143,7 @@ class LeaderboardView(discord.ui.View):
             self.current_page = self.total_pages
         await self.pages_embed(interaction, start_time)
 
-
+    # noinspection PyTypeChecker
     @discord.ui.button(label='Next', style=discord.ButtonStyle.primary, custom_id='ldb_next')
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         start_time = time.time()

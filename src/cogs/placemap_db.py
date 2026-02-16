@@ -4,13 +4,15 @@ from discord.ext import commands
 import sqlite3
 # import subprocess # for error handling
 import time
-# from collections import defaultdict
+# from collections import defaultdict # used previously, cannot remember if this was for error handling or not
 import tib_utility.config as config
 import tib_utility.db_utils as db_utils
 from tib_utility.db_utils import cursor, database, generate_placemap, find_pxls_username, description_format, CANVAS_REGEX, KEY_REGEX
 
 owner_id = config.owner()
-        
+
+
+# noinspection PyTypeChecker
 class PlacemapDBAdd(discord.ui.Modal, title='Add your log key.'):
     canvas = discord.ui.TextInput(label='Canvas Number', placeholder='Add canvas number (eg, 28 or 56a).', max_length=4, min_length=1)
     key = discord.ui.TextInput(label='Log key (512 char)', style=discord.TextStyle.paragraph, max_length=512, min_length=512)
@@ -73,6 +75,7 @@ class Placemap(commands.Cog):
             ''',
             color=discord.Color.purple()
             )
+        # noinspection PyTypeChecker
         button = discord.ui.Button(label='Add Log Key', style=discord.ButtonStyle.primary)
         button.callback = open_modal
         view = discord.ui.View()

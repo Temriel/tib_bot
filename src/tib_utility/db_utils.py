@@ -10,6 +10,7 @@ from PIL import Image
 import tib_utility.config as config
 from functools import lru_cache
 from pathlib import Path
+from collections import Counter
 
 CANVAS_REGEX = re.compile(r'^(?![cC])[a-z0-9]{1,4}$')
 KEY_REGEX = re.compile(r'(?=.*[a-z])[a-z0-9]{512}$')
@@ -153,21 +154,16 @@ async def most_active(user_log_file: str) -> tuple[tuple[int, int], int]:
 
 
 def read_most_active(user_log_file: str):
-    """Find the most active pixel using a user log file."""
-    pixel_counts = {}
-    with open(user_log_file, newline='') as csvfile:
-        reader = csv.reader(csvfile, delimiter='\t')
-        for row in reader:
-            if len(row) >= 6:
-                x = row[2].strip()
-                y = row[3].strip()
-                key = (x, y)
-                pixel_counts[key] = pixel_counts.get(key, 0) + 1
-    if pixel_counts:
-        found_most_active, count = max(pixel_counts.items(), key=lambda item: item[1])
-        return found_most_active, count
-    else:
+    coords = []
+    with open(user_log_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            parts = line.split('\t')
+            if len(parts) >= 6:
+                coords.append((parts[2].strip(), parts[3].strip()))
+    if not coords:
         return (0, 0), 0
+    (found_most_active, count), = Counter(coords).most_common(1)
+    return found_most_active, count
 
 
 async def pixel_counting(user_log_file: str):
@@ -176,15 +172,11 @@ async def pixel_counting(user_log_file: str):
 
 def read_pixel_counting(user_log_file: str):
     """Find placement amounts on a canvas"""
-    place, undo, mod = 0, 0, 0
     with open(user_log_file, 'r') as log_key:
-        for line in log_key:
-            if 'user place' in line:
-                place += 1
-            elif 'user undo' in line:
-                undo += 1
-            elif 'mod overwrite' in line:
-                mod += 1
+        data = log_key.read()
+    place = data.count('user place')
+    undo = data.count('undo')
+    mod = data.count('mod')
     total_pixels = place - undo
     return total_pixels, undo, mod
 
@@ -218,6 +210,7 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
         try:
             with Image.open(final_canvas_path).convert('RGB') as final_canvas_image:
                 width, height = final_canvas_image.size
+                final_canvas_data = final_canvas_image.load()
                 for coord, index in final_state.items():
                     x, y = coord
                     if x >= width or y >= height:
@@ -225,7 +218,7 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
                     if index >= len(palette):
                         continue
                     placed_pixel = palette[index]
-                    final_pixel = final_canvas_image.getpixel(coord)
+                    final_pixel = final_canvas_data[coord]
                     if final_pixel == placed_pixel:
                         survived += 1
                     else:
@@ -244,6 +237,7 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     palette_rgb = [tuple(c) for c in await gpl_palette(palette_path)]
     if not palette_rgb:
         return 0, 0
+
     template_images = []
     template_map = []
     try:
@@ -267,10 +261,15 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     except FileNotFoundError as e:
         print(f'{e}')
         return 0, 0
+
     if initial_canvas is None:
+        print("No initial canvas found.")
         return 0, 0
+
     tpe_place = {}
     tpe_grief = {}
+    template_cache = {}
+
     with open(user_log_file, newline='') as csvfile:
         reader = csv.reader(csvfile, delimiter='\t')
         for row in reader:
@@ -303,23 +302,29 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
                 initial_canvas_rgb = initial_canvas[x, y] # for virgin
             except IndexError:
                 continue
-            for tpe_image in template_map:
-                try:
-                    tpe_image_rgb = tpe_image[x, y] # for tpe check
-                except IndexError:
-                    continue
-                # palette check
-                if not isinstance(tpe_image_rgb, (tuple, list)) or len(tpe_image_rgb) < 4:
-                    continue
-                r, g, b, a = tpe_image_rgb
-                if a == 0: # ignore pixels if transparent (not on template)
-                    continue
-                present = True # confirms the pixel is in the template area
-                target_rgb = (r, g, b)
-                if placed_rgb == target_rgb:  # correct pixel
+            if coord not in template_cache:
+                correct_colour = set()
+                has_virgin = False
+                for tpe_image in template_map:
+                    try:
+                        tpe_image_rgb = tpe_image[x, y] # for tpe check
+                        if isinstance(tpe_image_rgb, (tuple, list)) and len(tpe_image_rgb) >= 4:
+                            r, g, b, a = tpe_image_rgb
+                            if a > 0:
+                                target_rgb = (r, g, b)
+                                correct_colour.add(target_rgb)
+                                if target_rgb == initial_canvas_rgb:
+                                    has_virgin = True
+                    except IndexError:
+                        continue
+                template_cache[coord] = (correct_colour, has_virgin)
+            correct_colour, has_virgin = template_cache[coord]
+
+            if correct_colour:
+                present = True
+                if placed_rgb in correct_colour:
                     is_correct = True
-                    break
-                if target_rgb == initial_canvas_rgb:  # virgin pixel
+                elif has_virgin:
                     is_virgin = True
             if is_correct or is_virgin: # since it passed the for loop, add as correct
                 tpe_place[coord] = tpe_place.get(coord, 0) + 1
@@ -329,77 +334,62 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
                 tpe_place.pop(coord, None)
     tpe_pixels = sum(tpe_place.values())
     tpe_griefs = sum(tpe_grief.values())
-    return tpe_pixels - tpe_griefs, tpe_griefs # I return tpe_pxiels - tpe_griefs so I don't have to do that math everywhere else lol
+    return tpe_pixels - tpe_griefs, tpe_griefs # I return tpe_pixels - tpe_griefs, so I don't have to do that math everywhere else lol
 
-# honestly this one and the following functions COULD be merged... probably. like they do almost the same thing but slightly differently.
-# maybe I can fix that via {{user_id}_pixels_c if user_id else _pixels_c{canvas}} but idk if that even WORKS
+
 async def tpe_pixels_count_user(user_id: int, callback=None) -> dict:
-    """Finds how many pixels a user has placed on all recorded TPE canvases using user logfiles."""
-    ple_dir = config.pxlslog_explorer_dir
-    if not ple_dir:
-        print('Pxlslog-explorer directory is not configured.')
-        return {}
-    user_logs_dir = os.path.join(ple_dir, 'pxls-userlogs-tib')
-    found_user_logs = []
-    if os.path.isdir(user_logs_dir):
-        with os.scandir(user_logs_dir) as entries:
-            user_logs_constant = f'{user_id}_pixels_c'
-            for entry in entries:
-                if not entry.is_file():
-                    continue
-                if entry.name.startswith(user_logs_constant) and entry.name.endswith('.log'):
-                    found_user_logs.append(os.path.join(user_logs_dir, entry.name))
-    results: dict[Union[int, str], dict] = {}
-    total = len(found_user_logs)
-    for idx, user_log_file in enumerate(found_user_logs):
-        basename = os.path.basename(user_log_file)
-        match = re.match(r'^(\d+)_pixels_c(.+)\.log$', basename, flags=re.IGNORECASE)
-        if not match:
-            print(f'Could not extract canvas from filename: {basename}')
-            continue
-        canvas = match.group(2)
-        if callback and ((idx + 1) % 10 == 0 or (idx + 1) == total):
-            await callback(canvas, idx + 1, total)
-        else:
-            print(f'Processing c{canvas} ({idx + 1}/{total}) for user {user_id}')
-        user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user_id}_pixels_c{canvas}.log'
-        await find_tpe_stats(canvas, ple_dir, results, user_id, user_log_file, result_key=canvas)
-    return results
+    return await tpe_pixels_count_user_canvas(user_id=user_id, callback=callback)
 
 
 async def tpe_pixels_count_canvas(canvas: str, callback=None) -> dict:
-    """Find how many pixels have been placed on a specific canvas by all registered users. Those with no data are ignored."""
-    if not config.tpe(canvas):
-        print(f'Canvas c{canvas} is not a TPE canvas, checking anyway.')
+    return await tpe_pixels_count_user_canvas(canvas=canvas, callback=callback)
+
+
+async def tpe_pixels_count_user_canvas(user_id: Optional[int] = None, canvas: Optional[str] = None, callback=None) -> dict:
     ple_dir = config.pxlslog_explorer_dir
     if not ple_dir:
-        print('Pxlslog-explorer directory is not configured.')
+        print('pxlslog-explorer directory is not configured.')
         return {}
     user_logs_dir = os.path.join(ple_dir, 'pxls-userlogs-tib')
     found_user_logs = []
     if os.path.isdir(user_logs_dir):
         with os.scandir(user_logs_dir) as entries:
             for entry in entries:
-                canvas_logs_constant = f'_pixels_c{canvas}.log'
                 if not entry.is_file():
                     continue
-                if entry.name.lower().endswith(canvas_logs_constant):
-                    found_user_logs.append(os.path.join(user_logs_dir, entry.name))
+                if user_id is not None:
+                    if entry.name.startswith(f'{user_id}_pixels_c') and entry.name.endswith('.log'):
+                        found_user_logs.append(entry.name)
+                else:
+                    if entry.name.lower().endswith(f'_pixels_c{canvas}.log'):
+                        found_user_logs.append(entry.name)
 
     results: dict[Union[int, str], dict] = {}
     total = len(found_user_logs)
-    for idx, user_log_file in enumerate(found_user_logs):
-        basename = os.path.basename(user_log_file)
-        match = re.match(r'(\d+)_pixels_c', basename)
+    file_regex = re.compile(r'^(\d+)_pixels_c(.+)\.log$', flags=re.IGNORECASE)
+
+    for idx, filename in enumerate(found_user_logs):
+        match = file_regex.match(filename)
         if not match:
-            print(f'Could not extract user ID from filename: {basename}')
+            print('Regex failed, continuing')
             continue
-        user_id = int(match.group(1))
-        if callback and ((idx + 1) % 10 == 0 or (idx + 1) == total):
-            await callback(user_id, idx + 1, total)
+        found_user_id = int(match.group(1))
+        found_canvas = match.group(2)
+        user_log_file = os.path.join(user_logs_dir, filename)
+
+        if user_id is not None:
+            result_key = found_canvas
+            to_print = f'Processing c{found_canvas} ({idx + 1}/{total}) for user {user_id}'
         else:
-            print(f'Processing user {user_id} ({idx + 1}/{total}) for c{canvas}')
-        await find_tpe_stats(canvas, ple_dir, results, user_id, user_log_file)
+            result_key = found_user_id
+            to_print = f'Processing user {found_user_id} ({idx + 1}/{total}) for c{canvas}'
+
+        if callback and ((idx + 1) % 10 == 0 or (idx + 1) == total):
+            await callback(result_key, idx + 1, total)
+        else:
+            print(to_print)
+
+        await find_tpe_stats(canvas=found_canvas, ple_dir=ple_dir, results=results, user_id=found_user_id, user_log_file=user_log_file, result_key=result_key)
     return results
 
 
@@ -609,6 +599,7 @@ class PlacemapAltView(discord.ui.View):
                 )
         return new_view
 
+    # noinspection PyTypeChecker
     @discord.ui.button(label='Activity', style=discord.ButtonStyle.primary, custom_id='activity')
     async def activity_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         button.disabled = True
@@ -620,6 +611,7 @@ class PlacemapAltView(discord.ui.View):
         else:
             await interaction.followup.send(embed=embed)
 
+    # noinspection PyTypeChecker
     @discord.ui.button(label='Age', style=discord.ButtonStyle.primary, custom_id='age')
     async def age_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         button.disabled = True

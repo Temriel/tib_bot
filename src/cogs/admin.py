@@ -16,7 +16,9 @@ async def is_owner_check(interaction: discord.Interaction) -> bool:
     return interaction.user.id == config.owner()
 
 class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
+    # noinspection PyTypeChecker
     user_canvas = discord.ui.TextInput(label='userID/name, canvas', placeholder='uID,28,30a,59 OR 56a,uID1,uID2,uID3', style=discord.TextStyle.short, max_length=200)
+    # noinspection PyTypeChecker
     key = discord.ui.TextInput(label='Log keys (512 char each)', placeholder='key1,key2,key3,key4,key5,key6', style=discord.TextStyle.paragraph, max_length=4000)
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -177,21 +179,22 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             new_total = new_stats['total']
             new_rank = new_stats['rank']
             new_group  = new_stats['group']
+            update_channel_id = config.update_channel()
+            update_channel = interaction.client.get_channel(update_channel_id)
+            to_update = True
+            if not isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
+                await interaction.response.send_message("update_channel_id not configured")
+                to_update = False
             if prev_rank != new_rank:
                 if new_rank == "griefer":
                     new_rank = "a griefer" # so the update_channel message makes more sense 
-                update_channel = interaction.client.get_channel(self.update_channel_id)
-                if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
-                    await update_channel.send(f'**{user}** should now be part of **{new_group}** with the rank of **{new_rank}**. They have **{new_total}** pixels placed.')
-                else:
-                    print(f'Does not work for {type(update_channel)}. If this error still persists, double check the channel ID in config.py, and that the bot has access to it')
-            if pixels >= 0:
-                status = "Added"
-            else:
-                status = "Removed"
-                pixels = abs(pixels)
-            await interaction.response.send_message(f"{status} {pixels} pixels for {user} on c{canvas}!")
-            print (f"{status} {pixels} pixels for {user} on canvas {canvas}")
+                if to_update:
+                    await update_channel.send(
+                    f'**{user}** should now be part of **{new_group}** with the rank of **{new_rank}**. They have **{new_total}** pixels placed.')
+            message = f'{"Added" if pixels >= 0 else "Removed"} {abs(pixels)} {"pixel" if pixels -1 or 1 else "pixels"} for {user} on c{canvas}!'
+            await interaction.response.send_message(message)
+            if to_update: await update_channel.send(message)
+            print (message)
         except Exception as e:
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
@@ -378,17 +381,17 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 return
             await interaction.response.defer(ephemeral=True, thinking=True)
             progress = await interaction.followup.send(f'Checking how many pixels have been placed on canvas {canvas}...', ephemeral=True, wait=True)
-            async def callback(user_id, idx, total):
+            async def callback(current_user_id, idx, total):
                 """Update the message so you can see THINGS are HAPPENING."""
-                await progress.edit(content=f'Checking how many pixels have been placed on canvas {canvas}... (user {user_id} {idx}/{total})')
-                print(f'Processing user {user_id} ({idx}/{total}) for c{canvas}')
+                await progress.edit(content=f'Checking how many pixels have been placed on canvas {canvas}... (user {current_user_id} {idx}/{total})')
+                print(f'Processing user {current_user_id} ({idx}/{total}) for c{canvas}')
             results = await tpe_pixels_count_canvas(canvas, callback=callback)
             if not results:
                 await progress.edit(content=f'No logs found for c{canvas}, or there\'s no user data present.')
                 return
             cursor.execute('SELECT user_id, username FROM users WHERE username IS NOT NULL')
             linked_users = dict(cursor.fetchall())
-            cleaned_results = sorted(results.keys(), key=lambda user_id: results[user_id].get('tpe_pixels', 0), reverse=True)
+            cleaned_results = sorted(results.keys(), key=lambda cleaned_user_id: results[cleaned_user_id].get('tpe_pixels', 0), reverse=True)
             header2 = f"{'User':<20} | {'Placed':>7} | {'For TPE':>7} | {'Griefed':>7}"
             header_seperator = f"{'-'*20}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}"
             pixels_total = sum(stats.get('total_pixels', 0) for stats in results.values())
