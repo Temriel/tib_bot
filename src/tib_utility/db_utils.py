@@ -686,7 +686,7 @@ def create_graph(canvases: list[str], pixels: list[int]) -> io.BytesIO:
     plt.tight_layout()
 
     buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', transparent=True)
+    plt.savefig(buffer, format='png', dpi=150)
     buffer.seek(0)
     plt.close(fig)
     

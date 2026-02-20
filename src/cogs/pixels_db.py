@@ -293,7 +293,11 @@ class Database(commands.Cog):
                     
             image_buffer = await asyncio.to_thread(create_graph, canvases, pixels)
             file = discord.File(image_buffer, filename=f'{internal_pxls_username}_graphed_over_time.png')
-            embed = discord.Embed(color=discord.Color.purple())
+            embed = discord.Embed(
+                title=f"{internal_pxls_username}",
+                description=f"Total pixels recorded: **{sum(pixels)}**\nTotal canvases recorded: **{len(canvases)}**",
+                color=discord.Color.purple()
+                )
             embed.set_image(url=f'attachment://{internal_pxls_username}_graphed_over_time.png')
 
             if internal_discord_user:
