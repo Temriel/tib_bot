@@ -114,22 +114,22 @@ class Commander(commands.Cog):
             cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (interaction.user.id,))
         except Exception as e:
             return await interaction.response.send_message(f'An error occurred while signing you up: {e}', ephemeral=True)
-        cursor.execute('SELECT status FROM notif WHERE user_id = ?', (interaction.user.id,))
+        cursor.execute('SELECT notif_status FROM users WHERE user_id = ?', (interaction.user.id,))
         result = cursor.fetchone()
         if result is None:
-            cursor.execute('INSERT INTO notif (user_id, status) VALUES (?, ?)', (interaction.user.id, 1))
+            cursor.execute('UPDATE users SET notif_status = 1 WHERE user_id = ?', (interaction.user.id,))
             database.commit()
             await interaction.response.send_message('You have been signed up for notifications!', ephemeral=True)
             print(f'{interaction.user} ({interaction.user.id}) signed up for notifications.')
             return None
         else:
             if result[0] == 1:
-                cursor.execute('UPDATE notif SET status = 0 WHERE user_id = ?', (interaction.user.id,))
+                cursor.execute('UPDATE users SET notif_status = 0 WHERE user_id = ?', (interaction.user.id,))
                 database.commit()
                 await interaction.response.send_message('You have been unsubscribed from notifications.', ephemeral=True)
                 print(f'{interaction.user} ({interaction.user.id}) unsubscribed from notifications.')
             if result[0] == 0:
-                cursor.execute('UPDATE notif SET status = 1 WHERE user_id = ?', (interaction.user.id,))
+                cursor.execute('UPDATE users SET notif_status = 1 WHERE user_id = ?', (interaction.user.id,))
                 database.commit()
                 await interaction.response.send_message('You have been re-subscribed to notifications!', ephemeral=True)
                 print(f'{interaction.user} ({interaction.user.id}) re-subscribed to notifications.')

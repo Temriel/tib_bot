@@ -26,10 +26,8 @@ cursor = database.cursor()
 cursor.execute('PRAGMA journal_mode=WAL;')
 cursor.execute('PRAGMA synchronous=NORMAL;')
 cursor.execute('PRAGMA temp_store=MEMORY;')
-database.execute('CREATE TABLE IF NOT EXISTS notif (user_id INT PRIMARY KEY, status BOOLEAN, FOREIGN KEY (user_id) '
-                 'REFERENCES users(user_id))')
 database.execute('CREATE TABLE IF NOT EXISTS points(user STR, canvas STR, pixels INT, PRIMARY KEY (user, canvas))')
-database.execute('CREATE TABLE IF NOT EXISTS users (user_id INT, username STR UNIQUE, PRIMARY KEY (user_id))')
+database.execute('CREATE TABLE IF NOT EXISTS users (user_id INT, username STR UNIQUE, notif_status BOOLEAN DEFAULT 0, PRIMARY KEY (user_id))')
 database.execute('CREATE TABLE IF NOT EXISTS logkey(user INT, canvas STR, key STR, PRIMARY KEY (user, canvas))')
 
 semaphore = asyncio.Semaphore(3)
