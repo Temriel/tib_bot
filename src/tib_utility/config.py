@@ -10,18 +10,21 @@ def owner():
     if owner_id is None:
         raise ValueError("owner_id not set!")
     return int(owner_id)
+
 def update_channel():
     """Channel for Tib status updates (rankups, placemap stats, etc.)"""
     update_channel_id = os.getenv("UPDATE_CHANNEL_ID")
     if update_channel_id is None:
         raise ValueError("UPDATE_CHANNEL_ID not set!")
     return int(update_channel_id)
+
 def admin_server():
     """Guild for admin commands."""
     admin_server_id = os.getenv("ADMIN_SERVER_ID")
     if admin_server_id is None:
         raise ValueError("ADMIN_SERVER_ID not set!")
     return int(admin_server_id)
+
 def dev_server():
     """Guild for development testing."""
     dev_server_id = os.getenv("DEV_SERVER_ID")
@@ -78,9 +81,8 @@ def paths(canvas: str, user: int, mode: str):
     output_path = f"{output_dir}/c{canvas}_{mode}_{user}.png"
     return bg, palette_path, output_path
 
-def tpe(canvas: str):
-    """All canvases TPE has been present on, for passing against images in /templates"""
-    tpe_canvas = [ # split 0-9 wise (see below)
+def tpe_canvas():
+    return [ # split 0-9 wise (see below)
         # before che
         "51", "52", "53", "54", "55", 
         # during che
@@ -92,7 +94,10 @@ def tpe(canvas: str):
         "90", "91", "92", "93", "93a", "94", "95", "96", "97", "98", "99", 
         "100"
         ]
-    tpe_present = canvas.strip() in tpe_canvas
+
+def tpe(canvas: str):
+    """All canvases TPE has been present on, for passing against images in /templates"""
+    tpe_present = canvas.strip() in tpe_canvas()
     return tpe_present
 
 def ranks():

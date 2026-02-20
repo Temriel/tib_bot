@@ -21,7 +21,7 @@ class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
     # noinspection PyTypeChecker
     key = discord.ui.TextInput(label='Log keys (512 char each)', placeholder='key1,key2,key3,key4,key5,key6', style=discord.TextStyle.paragraph, max_length=4000)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction: discord.Interaction) -> None:
         query_logkey = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)"
         query_user = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
         try:

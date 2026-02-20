@@ -5,7 +5,9 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 import time
 import io
-from tib_utility.db_utils import cursor, get_linked_pxls_username, get_linked_discord_username, get_stats, CANVAS_REGEX, USERNAME_REGEX
+import asyncio
+from tib_utility import config
+from tib_utility.db_utils import cursor, get_linked_pxls_username, get_linked_discord_username, get_stats, CANVAS_REGEX, USERNAME_REGEX, create_graph
 from typing import Optional
 
 def create_pages(items: list, page: int, page_size: int = 30):
@@ -232,6 +234,79 @@ class Database(commands.Cog):
         elapsed_time = end_time - start_time
         embed.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {view.current_page}/{view.total_pages}')
         await interaction.response.send_message(embed=embed, file=file, view=view)
+    
+    group = app_commands.Group(name="graph", description="View stats through GRAPHS:tm:")
+
+    @group.command(name='user', description='View how much a user has placed for TPE over time.')
+    async def pxls_db_graph_user(self, interaction: discord.Interaction, pxlsuser: Optional[str] = None, discorduser: Optional[discord.User] = None):
+        """Graph # TPE pixels per canvas."""
+        await interaction.response.defer(thinking=True)
+        # handles input
+        if pxlsuser and discorduser or pxlsuser:
+            if not USERNAME_REGEX.fullmatch(pxlsuser):
+                await interaction.response.send_message('Invalid username', ephemeral=True)
+                return
+            internal_pxls_username = pxlsuser
+            linked_discord = await get_linked_discord_username(internal_pxls_username)
+            if not linked_discord:
+                internal_discord_user = None
+            else:
+                internal_discord_user = await interaction.client.fetch_user(linked_discord)
+        # only discord user, errors if no pxls username
+        elif discorduser:
+            internal_pxls_username = await get_linked_pxls_username(discorduser.id)
+            internal_discord_user = discorduser
+            if not internal_pxls_username:
+                await interaction.response.send_message(f'{discorduser} does not have a linked Pxls username (yet)', ephemeral=True)
+                return
+        # no arguments provided, uses interaction user (errors again if no pxls username)
+        else:
+            internal_discord_user = interaction.user
+            internal_pxls_username = await get_linked_pxls_username(internal_discord_user.id)
+            if not internal_pxls_username:
+                await interaction.response.send_message(f'You do not have a linked Pxls username (yet).', ephemeral=True)
+                return
+        # handles the Graphering
+        try:
+            cursor.execute("SELECT canvas, pixels FROM points WHERE user = ?", (internal_pxls_username,))
+            data = cursor.fetchall()
+            if not data:
+                await interaction.followup.send(f'No data found for {internal_pxls_username}.', ephemeral=True)
+
+            data = {str(row[0]): row[1] for row in data}
+            canvases = []
+            pixels = []
+            first = None
+            last = None
+            for i, c in enumerate(config.tpe_canvas()):
+                if c in data:
+                    if first is None:
+                        first = i
+                    last = i
+                    
+            if first is None or last is None:
+                await interaction.followup.send(f'No TPE data found for {internal_pxls_username}.', ephemeral=True)
+                return
+            for c in config.tpe_canvas()[first:last+1]:
+                canvases.append(f"c{c}")
+                pixels.append(data[c] if c in data else 0)
+                    
+            image_buffer = await asyncio.to_thread(create_graph, canvases, pixels)
+            file = discord.File(image_buffer, filename=f'{internal_pxls_username}_graphed_over_time.png')
+            embed = discord.Embed(color=discord.Color.purple())
+            embed.set_image(url=f'attachment://{internal_pxls_username}_graphed_over_time.png')
+
+            if internal_discord_user:
+                embed.set_author(
+                    name=internal_discord_user.global_name or internal_discord_user.name,
+                    icon_url=internal_discord_user.avatar.url if internal_discord_user.avatar else internal_discord_user.default_avatar.url,
+                )
+            else:
+                embed.set_author(name=internal_pxls_username)
+            await interaction.followup.send(embed=embed, file=file)
+        except Exception as e:
+            await interaction.followup.send("An error occurred.", ephemeral=True)
+            print(f"An error occurred: {e}")
 
 async def setup(client):
     await client.add_cog(Database(client))

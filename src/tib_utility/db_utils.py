@@ -3,6 +3,7 @@ import asyncio
 import csv
 import os
 import re
+import io
 import time
 from typing import Union, Optional
 import discord
@@ -11,6 +12,9 @@ import tib_utility.config as config
 from functools import lru_cache
 from pathlib import Path
 from collections import Counter
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
 
 CANVAS_REGEX = re.compile(r'^(?![cC])[a-z0-9]{1,4}$')
 KEY_REGEX = re.compile(r'(?=.*[a-z])[a-z0-9]{512}$')
@@ -647,3 +651,40 @@ class PlacemapAltView(discord.ui.View):
                 color=discord.Color.red()
             )
             return embed, None
+
+
+def create_graph(canvases: list[str], pixels: list[int]) -> io.BytesIO:
+    """Generic function to create graphs."""
+    cumulative = []
+    current_total = 0
+    for pixel in pixels:
+        current_total += pixel
+        cumulative.append(current_total)
+        
+    plt.style.use('dark_background')
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+
+    per_canvas = ax1.plot(canvases, pixels, marker='o', linestyle='-', color='purple', linewidth=2, markersize=6, label='Pixels for TPE')
+    ax1.set_title(f"TPE pixels per canvas", fontsize=14, pad=15)
+    ax1.set_xlabel('Canvas', fontsize=12)
+    ax1.set_ylabel('Pixels for TPE', color='purple', fontsize=12)
+    ax1.tick_params(axis='y', labelcolor='purple') 
+    ax1.grid(True, linestyle='--', alpha=0.3)
+    ax1.tick_params(axis='x', rotation=45)
+    
+    ax2 = ax1.twinx()
+    cumulative_line = ax2.plot(canvases, cumulative, marker='s', linestyle='--', color='cyan', linewidth=2, markersize=6, label='Cumulative')
+    ax2.set_ylabel('Cumulative', color='cyan', fontsize=12)
+    ax2.tick_params(axis='y', labelcolor='cyan')
+    
+    lines = per_canvas + cumulative_line
+    labels = [str(line.get_label()) for line in lines]
+    ax1.legend(lines, labels, loc='upper left')
+    plt.tight_layout()
+
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', transparent=True)
+    buffer.seek(0)
+    plt.close(fig)
+    
+    return buffer
