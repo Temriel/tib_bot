@@ -15,6 +15,7 @@ from collections import Counter
 import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
+from matplotlib.ticker import StrMethodFormatter
 
 CANVAS_REGEX = re.compile(r'^(?![cC])[a-z0-9]{1,4}$')
 KEY_REGEX = re.compile(r'(?=.*[a-z])[a-z0-9]{512}$')
@@ -671,11 +672,13 @@ def create_graph(canvases: list[str], pixels: list[int]) -> io.BytesIO:
     ax1.tick_params(axis='y', labelcolor='purple') 
     ax1.grid(True, linestyle='--', alpha=0.3)
     ax1.tick_params(axis='x', rotation=45)
+    ax1.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
     
     ax2 = ax1.twinx()
     cumulative_line = ax2.plot(canvases, cumulative, marker='s', linestyle='--', color='cyan', linewidth=2, markersize=6, label='Cumulative')
     ax2.set_ylabel('Cumulative', color='cyan', fontsize=12)
     ax2.tick_params(axis='y', labelcolor='cyan')
+    ax2.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
     
     lines = per_canvas + cumulative_line
     labels = [str(line.get_label()) for line in lines]

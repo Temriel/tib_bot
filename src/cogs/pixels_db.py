@@ -238,7 +238,7 @@ class Database(commands.Cog):
     group = app_commands.Group(name="graph", description="View stats through GRAPHS:tm:")
 
     @group.command(name='user', description='View how much a user has placed for TPE over time.')
-    async def pxls_db_graph_user(self, interaction: discord.Interaction, pxlsuser: Optional[str] = None, discorduser: Optional[discord.User] = None):
+    async def pixels_db_graph_user(self, interaction: discord.Interaction, pxlsuser: Optional[str] = None, discorduser: Optional[discord.User] = None):
         """Graph # TPE pixels per canvas."""
         await interaction.response.defer(thinking=True)
         # handles input
@@ -304,6 +304,50 @@ class Database(commands.Cog):
             else:
                 embed.set_author(name=internal_pxls_username)
             await interaction.followup.send(embed=embed, file=file)
+        except Exception as e:
+            await interaction.followup.send("An error occurred.", ephemeral=True)
+            print(f"An error occurred: {e}")
+    
+    @group.command(name='all', description='View how much has been placed for TPE over time.')
+    async def pixels_db_graph_all(self, interaction: discord.Interaction):
+        """Graph total TPE pixels per canvas."""
+        await interaction.response.defer(thinking=True)
+        try:
+            cursor.execute("SELECT canvas, SUM(pixels) FROM points GROUP BY canvas")
+            data = cursor.fetchall()
+            cursor.execute("SELECT COUNT(DISTINCT user) FROM points")
+            active_users = cursor.fetchone()[0]
+            if not data:
+                await interaction.followup.send('No data found.', ephemeral=True)
+                return
+            
+            data = {str(row[0]): row[1] for row in data}
+            canvases = []
+            pixels = []
+            first = None
+            last = None
+            for i, c in enumerate(config.tpe_canvas()):
+                if c in data:
+                    if first is None:
+                        first = i
+                    last = i
+            if first is None or last is None:
+                await interaction.followup.send('No TPE data found.', ephemeral=True)
+                return
+            for c in config.tpe_canvas()[first:last+1]:
+                canvases.append(f"c{c}")
+                pixels.append(data[c] if c in data else 0)
+                
+            image_buffer = await asyncio.to_thread(create_graph, canvases, pixels)
+            file = discord.File(image_buffer, filename='tpe_all_graphed_over_time.png')
+            embed = discord.Embed(
+                title="TPE Global Stats",
+                description=f"Total pixels recorded: **{sum(pixels)}**\nTotal users recorded: **{active_users}**\nTotal canvases recorded: **{len(canvases)}**",
+                color=discord.Color.purple()
+                )
+            embed.set_image(url=f'attachment://{file.filename}')
+            await interaction.followup.send(embed=embed, file=file)
+            
         except Exception as e:
             await interaction.followup.send("An error occurred.", ephemeral=True)
             print(f"An error occurred: {e}")
