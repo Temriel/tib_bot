@@ -8,7 +8,7 @@ import re
 import asyncio
 import tib_utility.db_utils as db_utils
 from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, \
-    find_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX, resolve_name
+    get_linked_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX, resolve_name
 
 
 async def is_owner_check(interaction: discord.Interaction) -> bool:
@@ -189,11 +189,13 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 if new_rank == "griefer":
                     new_rank = "a griefer" # so the update_channel message makes more sense 
                 if to_update:
-                    await update_channel.send(
-                    f'**{user}** should now be part of **{new_group}** with the rank of **{new_rank}**. They have **{new_total}** pixels placed.')
+                    if isinstance(update_channel, (discord.TextChannel, discord.Thread)):
+                        await update_channel.send(
+                        f'**{user}** should now be part of **{new_group}** with the rank of **{new_rank}**. They have **{new_total}** pixels placed.')
             message = f'{"Added" if pixels >= 0 else "Removed"} {abs(pixels)} {"pixel" if pixels -1 or 1 else "pixels"} for {user} on c{canvas}!'
             await interaction.response.send_message(message)
-            if to_update: await update_channel.send(message)
+            if isinstance(update_channel, (discord.TextChannel, discord.Thread)):
+                if to_update: await update_channel.send(message)
             print (message)
         except Exception as e:
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
@@ -264,7 +266,10 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
         else:
             await interaction.followup.send(results['error'])
             return
-        pxls_username = await find_pxls_username(user)
+        pxls_username = await get_linked_pxls_username(user.id)
+        if not pxls_username:
+            pxls_username = user.global_name or user.name
+            
         if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
             embed = discord.Embed(
             title=f'{pxls_username} on c{canvas}', 
@@ -320,6 +325,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             if not results:
                 await progress.edit(content=f'No logs found for <@{user.id}>')
                 return
+            
             cleaned_results = sorted(results.keys(), key=lambda c: (int(re.sub(r'\D', '', c)), re.sub(r'\d', '', c)))
             header = f'<@{user.id}> ({user.id})'
             header2 = f"{'Canvas':<6} | {'Placed':>7} | {'For TPE':>7} | {'Griefed':>7}"
@@ -328,6 +334,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             tpe_total = sum(stats.get('tpe_pixels', 0) for stats in results.values())
             grief_total = sum(stats.get('tpe_griefs', 0) for stats in results.values())
             lines = []
+            
             for canvas in cleaned_results:
                 stats = results.get(canvas, {})
                 total_pixels = stats.get('total_pixels', 0)
@@ -335,6 +342,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 tpe_griefs = stats.get('tpe_griefs', 0)
                 line = f"{'c'+canvas:<6} | {total_pixels:>7} | {tpe_pixels:>7} | {tpe_griefs:>7}"
                 lines.append(line)
+                
             summary = f"{'-'*6}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}\n{'Total':<6} | {pixels_total:>7} | {tpe_total:>7} | {grief_total:>7}"
             chunks = []
             current_chunk = f'{header}\n```{header2}\n{header_seperator}'
@@ -389,6 +397,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             if not results:
                 await progress.edit(content=f'No logs found for c{canvas}, or there\'s no user data present.')
                 return
+            
             cursor.execute('SELECT user_id, username FROM users WHERE username IS NOT NULL')
             linked_users = dict(cursor.fetchall())
             cleaned_results = sorted(results.keys(), key=lambda cleaned_user_id: results[cleaned_user_id].get('tpe_pixels', 0), reverse=True)
@@ -398,6 +407,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             tpe_total = sum(stats.get('tpe_pixels', 0) for stats in results.values())
             grief_total = sum(stats.get('tpe_griefs', 0) for stats in results.values())
             lines = []
+            
             for user_id in cleaned_results:
                 stats = results.get(user_id, {})
                 total_pixels = stats.get('total_pixels', 0)
@@ -406,6 +416,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 name = linked_users.get(user_id, str(user_id))
                 line = f"{name:<20} | {total_pixels:>7} | {tpe_pixels:>7} | {tpe_griefs:>7}"
                 lines.append(line)
+                
             summary = f"{'-'*20}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}\n{'Total':<20} | {pixels_total:>7} | {tpe_total:>7} | {grief_total:>7}"
             chunks = []
             current_chunk = f'```{header2}\n{header_seperator}'

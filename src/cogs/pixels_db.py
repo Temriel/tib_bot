@@ -5,7 +5,7 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 import time
 import io
-from tib_utility.db_utils import cursor, get_linked_discord_username, get_linked_pxls_username, get_stats, CANVAS_REGEX, USERNAME_REGEX
+from tib_utility.db_utils import cursor, get_linked_pxls_username, get_linked_discord_username, get_stats, CANVAS_REGEX, USERNAME_REGEX
 from typing import Optional
 
 def create_pages(items: list, page: int, page_size: int = 30):
@@ -172,14 +172,14 @@ class Database(commands.Cog):
                 await interaction.response.send_message('Invalid username', ephemeral=True)
                 return
             internal_pxls_username = pxlsuser
-            linked_discord = get_linked_pxls_username(internal_pxls_username)
+            linked_discord = await get_linked_discord_username(internal_pxls_username)
             if not linked_discord:
                 internal_discord_user = None
             else: 
                 internal_discord_user = await interaction.client.fetch_user(linked_discord)
         # only discord user, errors if no pxls username
         elif discorduser:
-            internal_pxls_username = get_linked_discord_username(discorduser.id)
+            internal_pxls_username = await get_linked_pxls_username(discorduser.id)
             internal_discord_user = discorduser
             if not internal_pxls_username:
                 await interaction.response.send_message(f'{discorduser} does not have a linked Pxls username (yet)', ephemeral=True)
@@ -187,7 +187,7 @@ class Database(commands.Cog):
         # no arguments provided, uses interaction user (errors again if no pxls username)
         else:
             internal_discord_user = interaction.user
-            internal_pxls_username = get_linked_discord_username(internal_discord_user.id)
+            internal_pxls_username = await get_linked_pxls_username(internal_discord_user.id)
             if not internal_pxls_username:
                 await interaction.response.send_message(f'You do not have a linked Pxls username (yet).', ephemeral=True)
                 return

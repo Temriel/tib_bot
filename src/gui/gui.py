@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import sqlite3
@@ -8,12 +9,12 @@ SRC_DIR = os.path.dirname(CUR_DIR)
 sys.path.append(SRC_DIR)
 
 
-from tib_utility.db_utils import cursor, database, get_all_users, get_linked_pxls_username, get_linked_discord_username, CANVAS_REGEX, KEY_REGEX
+from tib_utility.db_utils import cursor, database, get_all_users, get_linked_discord_username, get_linked_pxls_username, CANVAS_REGEX, KEY_REGEX
 import tkinter
 from tkinter import messagebox, ttk
 
 
-def find_data():
+async def find_data():
     """Find all userdata in the DB."""
     users = get_all_users()
     users_db_data = {str(row[1]): row[0] for row in users} # since this returns (user_id, username)
@@ -38,19 +39,19 @@ def find_data():
 
 def refresh_data():
     """Query the DB to refresh stats."""
-    data = find_data()
+    data = asyncio.run(find_data())
     for row in tree.get_children():
         tree.delete(row)
     for row in data:
         tree.insert('', 'end', values=row)
 
 
-def resolve_user_gui(identifier: str):
+async def resolve_user_gui(identifier: str):
     identifier = identifier.strip()
     if identifier.isdigit() and len(identifier) > 16:
         return int(identifier)
 
-    linked_id = get_linked_pxls_username(identifier)
+    linked_id = await get_linked_discord_username(identifier)
     if linked_id:
         return int(linked_id)
     return None
@@ -91,7 +92,7 @@ def logkey_add(): # /admin force-add but GUI form!
             if is_canvas_many:  # one user, multiple canvases
                 user_input = user_canvases[0]
                 canvases = user_canvases[1:]
-                user_id = resolve_user_gui(user_input)
+                user_id = asyncio.run(resolve_user_gui(user_input))
                 if not user_id:
                     messagebox.showerror("Error", f"Could not find a linked name for {user_input}. Are you sure you typed it correctly or that they\'re linked?")
                     return
@@ -116,7 +117,8 @@ def logkey_add(): # /admin force-add but GUI form!
                         fail.append(f"c{canvas}, SQLite error: {e}")
                     except Exception as e:
                         fail.append(f"c{canvas}, Error: {e}")
-                find_username = get_linked_discord_username(user_id)
+                        
+                find_username = asyncio.run(get_linked_pxls_username(user_id))
                 message = f"{find_username} ({user_id}) now has keys for canvases: {', '.join(success)}"
                 if fail:
                     message += f"\nFailed for canvases: {', '.join(fail)}"
@@ -132,7 +134,7 @@ def logkey_add(): # /admin force-add but GUI form!
                 success = []
                 fail = []
                 for user_input, key in zip(user_inputs, keys):
-                    user_id = resolve_user_gui(user_input)
+                    user_id = asyncio.run(resolve_user_gui(user_input))
                     if not user_id:
                         fail.append(f"{user_input}, Invalid user format")
                     if not KEY_REGEX.fullmatch(key):

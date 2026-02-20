@@ -7,7 +7,7 @@ import time
 # from collections import defaultdict # used previously, cannot remember if this was for error handling or not
 import tib_utility.config as config
 import tib_utility.db_utils as db_utils
-from tib_utility.db_utils import cursor, database, generate_placemap, find_pxls_username, description_format, CANVAS_REGEX, KEY_REGEX
+from tib_utility.db_utils import cursor, database, generate_placemap, get_linked_pxls_username, description_format, CANVAS_REGEX, KEY_REGEX
 
 owner_id = config.owner()
 
@@ -100,7 +100,9 @@ class Placemap(commands.Cog):
         else:
             await interaction.followup.send(results['error'])
             return
-        pxls_username = await find_pxls_username(user)
+        pxls_username = await get_linked_pxls_username(user.id)
+        if not pxls_username:
+            pxls_username = user.global_name or user.name
 
         if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
             embed = discord.Embed(

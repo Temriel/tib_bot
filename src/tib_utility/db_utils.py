@@ -45,7 +45,7 @@ def db_shutdown():
         print(f'Error during DB shutdown: {e}')
 
 
-def get_linked_discord_username(user_id: int):
+async def get_linked_pxls_username(user_id: int):
     """Get the linked Pxls username for a given Discord user ID."""
     query = "SELECT username FROM users WHERE user_id = ?"
     cursor.execute(query, (user_id,))
@@ -53,7 +53,7 @@ def get_linked_discord_username(user_id: int):
     return result[0] if result else None
 
 
-def get_linked_pxls_username(pxls_username: str):
+async def get_linked_discord_username(pxls_username: str):
     """Get the linked Discord user for a given Pxls username."""
     query = "SELECT user_id FROM users WHERE username = ?"
     cursor.execute(query, (pxls_username,))
@@ -64,7 +64,7 @@ def get_linked_pxls_username(pxls_username: str):
 async def resolve_name(identifier: str) -> int | None:
     if identifier.isdigit() and len(identifier) > 16:
         return int(identifier)
-    linked_id = get_linked_pxls_username(identifier)
+    linked_id = await get_linked_discord_username(identifier)
     if linked_id:
         return int(linked_id)
     return None
@@ -211,6 +211,9 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
             with Image.open(final_canvas_path).convert('RGB') as final_canvas_image:
                 width, height = final_canvas_image.size
                 final_canvas_data = final_canvas_image.load()
+                if final_canvas_data is None:
+                    print('Failed to load final canvas image.')
+                    return 0, 0, 0
                 for coord, index in final_state.items():
                     x, y = coord
                     if x >= width or y >= height:
@@ -556,19 +559,6 @@ async def description_format(canvas: str, results: dict) -> str:
     if mod > 0:
         constructed_desc += f'\n**Mod Overwrites:** {mod}'
     return constructed_desc
-
-
-async def find_pxls_username(user: Union[discord.User, discord.Member]) -> str:
-    """Find the pxls.space username linked to a Discord user ID."""
-    query = "SELECT username FROM users WHERE user_id = ?"
-    cursor.execute(query, (user.id,))
-    found_user = cursor.fetchone()
-    if found_user and found_user[0]:
-        pxls_username = found_user[0]
-        return pxls_username
-    else:
-        pxls_username = user.global_name or user.name
-        return pxls_username
 
 
 class PlacemapAltView(discord.ui.View):
