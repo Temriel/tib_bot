@@ -208,7 +208,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
         if not await is_owner_check(interaction):
             await interaction.followup.send("You do not have permission to use this command :3", ephemeral=True)
             return
-        cursor.execute('SELECT user_id FROM notif WHERE status = 1')
+        cursor.execute('SELECT user_id FROM users WHERE notif_status = 1')
         users_to_notify = cursor.fetchall()
         if not users_to_notify:
             await interaction.followup.send('No users to notify.', ephemeral=True)
