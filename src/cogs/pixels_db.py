@@ -238,9 +238,11 @@ class Database(commands.Cog):
     group = app_commands.Group(name="graph", description="View stats through GRAPHS:tm:")
 
     @group.command(name='user', description='View how much a user has placed for TPE over time.')
+    @app_commands.describe(pxlsuser='Pxls username to graph.', discorduser='Discord username to graph.')
     async def pixels_db_graph_user(self, interaction: discord.Interaction, pxlsuser: Optional[str] = None, discorduser: Optional[discord.User] = None):
         """Graph # TPE pixels per canvas."""
         await interaction.response.defer(thinking=True)
+        start_time = time.time()
         # handles input
         if pxlsuser and discorduser or pxlsuser:
             if not USERNAME_REGEX.fullmatch(pxlsuser):
@@ -272,7 +274,7 @@ class Database(commands.Cog):
             data = cursor.fetchall()
             if not data:
                 await interaction.followup.send(f'No data found for {internal_pxls_username}.', ephemeral=True)
-
+                return
             data = {str(row[0]): row[1] for row in data}
             canvases = []
             pixels = []
@@ -290,15 +292,18 @@ class Database(commands.Cog):
             for c in config.tpe_canvas()[first:last+1]:
                 canvases.append(f"c{c}")
                 pixels.append(data[c] if c in data else 0)
-                    
+            
+            stats = get_stats(internal_pxls_username)
+            rank = stats['rank']
+            group = stats['group']
             image_buffer = await asyncio.to_thread(create_graph, canvases, pixels)
             file = discord.File(image_buffer, filename=f'{internal_pxls_username}_graphed_over_time.png')
             embed = discord.Embed(
                 title=f"{internal_pxls_username}",
-                description=f"Total pixels recorded: **{sum(pixels)}**\nTotal canvases recorded: **{len(canvases)}**",
+                description=f"Part of **{group}** as **{rank}**\nTotal pixels recorded: **{sum(pixels)}**\nTotal canvases recorded: **{len(canvases)}**",
                 color=discord.Color.purple()
                 )
-            embed.set_image(url=f'attachment://{internal_pxls_username}_graphed_over_time.png')
+            embed.set_image(url=f'attachment://{file.filename}')
 
             if internal_discord_user:
                 embed.set_author(
@@ -307,6 +312,9 @@ class Database(commands.Cog):
                 )
             else:
                 embed.set_author(name=internal_pxls_username)
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
             await interaction.followup.send(embed=embed, file=file)
         except Exception as e:
             await interaction.followup.send("An error occurred.", ephemeral=True)
@@ -316,6 +324,7 @@ class Database(commands.Cog):
     async def pixels_db_graph_all(self, interaction: discord.Interaction):
         """Graph total TPE pixels per canvas."""
         await interaction.response.defer(thinking=True)
+        start_time = time.time()
         try:
             cursor.execute("SELECT canvas, SUM(pixels) FROM points GROUP BY canvas")
             data = cursor.fetchall()
@@ -350,6 +359,9 @@ class Database(commands.Cog):
                 color=discord.Color.purple()
                 )
             embed.set_image(url=f'attachment://{file.filename}')
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
             await interaction.followup.send(embed=embed, file=file)
             
         except Exception as e:

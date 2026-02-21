@@ -192,7 +192,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                     if isinstance(update_channel, (discord.TextChannel, discord.Thread)):
                         await update_channel.send(
                         f'**{user}** should now be part of **{new_group}** with the rank of **{new_rank}**. They have **{new_total}** pixels placed.')
-            message = f'{"Added" if pixels >= 0 else "Removed"} {abs(pixels)} {"pixel" if pixels -1 or 1 else "pixels"} for {user} on c{canvas}!'
+            message = f'{"Added" if pixels >= 0 else "Removed"} {abs(pixels)} {"pixel" if pixels == -1 or pixels == 1 else "pixels"} for {user} on c{canvas}!'
             await interaction.response.send_message(message)
             if isinstance(update_channel, (discord.TextChannel, discord.Thread)):
                 if to_update: await update_channel.send(message)

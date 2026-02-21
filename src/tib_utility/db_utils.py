@@ -669,7 +669,7 @@ def create_graph(canvases: list[str], pixels: list[int]) -> io.BytesIO:
     ax1.set_title(f"TPE pixels per canvas", fontsize=14, pad=15)
     ax1.set_xlabel('Canvas', fontsize=12)
     ax1.set_ylabel('Pixels for TPE', color='purple', fontsize=12)
-    ax1.tick_params(axis='y', labelcolor='purple') 
+    ax1.tick_params(axis='y', labelcolor='purple', rotation=45) 
     ax1.grid(True, linestyle='--', alpha=0.3)
     ax1.tick_params(axis='x', rotation=45)
     ax1.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
@@ -677,7 +677,7 @@ def create_graph(canvases: list[str], pixels: list[int]) -> io.BytesIO:
     ax2 = ax1.twinx()
     cumulative_line = ax2.plot(canvases, cumulative, marker='s', linestyle='--', color='cyan', linewidth=2, markersize=6, label='Cumulative')
     ax2.set_ylabel('Cumulative', color='cyan', fontsize=12)
-    ax2.tick_params(axis='y', labelcolor='cyan')
+    ax2.tick_params(axis='y', labelcolor='cyan', rotation=-45)
     ax2.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
     
     lines = per_canvas + cumulative_line
