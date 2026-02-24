@@ -449,9 +449,9 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         user_key = str(user_key)
         if not KEY_REGEX.fullmatch(user_key):
             return False, {'error': f'Invalid format! A log key can only contain a-z, and 0-9.'}
-
-        if not nofilter:
-            user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
+        
+        user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
+        if not nofilter or not os.path.exists(user_log_file):
             filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', logfile,
                         '--output', user_log_file]
             filter_result = await asyncio.create_subprocess_exec(
@@ -474,10 +474,7 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
                 return False, {'error': f'An error occurred while accessing the log file: {e}'}
             filter_end_time = time.time()
             print(f'filter.exe took {filter_end_time - filter_start_time:.2f}s')
-        else:
-            user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
-            if not os.path.exists(user_log_file):
-                return False, {'error': f'No userlog found, have you generated a placemap for c{canvas} before?'}
+
         total_pixels, undo, mod = await pixel_counting(user_log_file)
 
         survive_start_time = time.time()
