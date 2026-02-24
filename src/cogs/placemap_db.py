@@ -4,6 +4,7 @@ from discord.ext import commands
 import sqlite3
 # import subprocess # for error handling
 import time
+from typing import Optional
 # from collections import defaultdict # used previously, cannot remember if this was for error handling or not
 import tib_utility.config as config
 import tib_utility.db_utils as db_utils
@@ -83,15 +84,17 @@ class Placemap(commands.Cog):
         await interaction.response.send_message(embed=embed, view=view)
 
     @group.command(name='generate', description='Generate a placemap from a log key.')
-    @app_commands.describe(canvas='What canvas to generate the placemap for.')
-    async def placemap_db_generate(self, interaction: discord.Interaction, canvas: str):
+    @app_commands.describe(canvas='What canvas to generate the placemap for.', nofilter='Skip filtering (only for repeat pladcemaps, much faster but returns if no logkey)')
+    async def placemap_db_generate(self, interaction: discord.Interaction, canvas: str, nofilter: Optional[bool] = False):
         """Generate a placemap by piping the necessary arguments to pxlslog-explorer."""
         user = interaction.user
         update_channel_id = config.update_channel()
         update_channel = interaction.client.get_channel(update_channel_id)
         start_time = time.time()
+        if nofilter is not None:
+            nofilter = nofilter
         await interaction.response.defer(ephemeral=False,thinking=True)
-        state, results = await generate_placemap(user, canvas)
+        state, results = await generate_placemap(user, canvas, nofilter)
 
         if state:
             constructed_desc = await description_format(canvas, results)

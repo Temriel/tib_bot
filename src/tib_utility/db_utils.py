@@ -421,7 +421,7 @@ async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], di
         results[key] = {'total_pixels': 0, 'undo': 0, 'tpe_pixels': 0, 'tpe_griefs': 0}
 
 
-async def generate_placemap(user: Union[discord.User, discord.Member], canvas: str) -> tuple[bool, dict]:
+async def generate_placemap(user: Union[discord.User, discord.Member], canvas: str, nofilter: Optional[bool] = False) -> tuple[bool, dict]:
     """Helper function to generate a placemap. Returns various other user logkey stats as well."""
     async with semaphore:
         filter_start_time = time.time()
@@ -450,29 +450,34 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         if not KEY_REGEX.fullmatch(user_key):
             return False, {'error': f'Invalid format! A log key can only contain a-z, and 0-9.'}
 
-        user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
-        filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', logfile,
-                      '--output', user_log_file]
-        filter_result = await asyncio.create_subprocess_exec(
-            *filter_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        print(f'Filtering {user_key} for {user} on canvas {canvas}.')
-        stdout, stderr = await filter_result.communicate()
-        stdout_str = stdout.decode('utf-8').strip()
-        stderr_str = stderr.decode('utf-8').strip()
-        print(f'Subprocess output: {stdout_str}')
-        print(f'Subprocess error: {stderr_str}')
-        if filter_result.returncode != 0:
-            return False, {'error': f'Something went wrong when filtering the log file! Ping Temriel.'}
-        try:
-            if os.path.getsize(user_log_file) == 0:
-                return False, {'error': f'Invalid log key for c{canvas}. Wrong key?'}
-        except FileNotFoundError:
-            return False, {'error': f'Log file not found after filtering. Ping Temriel.'}
-        except Exception as e:
-            return False, {'error': f'An error occurred while accessing the log file: {e}'}
-        filter_end_time = time.time()
-        print(f'filter.exe took {filter_end_time - filter_start_time:.2f}s')
+        if not nofilter:
+            user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
+            filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', logfile,
+                        '--output', user_log_file]
+            filter_result = await asyncio.create_subprocess_exec(
+                *filter_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            print(f'Filtering {user_key} for {user} on canvas {canvas}.')
+            stdout, stderr = await filter_result.communicate()
+            stdout_str = stdout.decode('utf-8').strip()
+            stderr_str = stderr.decode('utf-8').strip()
+            print(f'Subprocess output: {stdout_str}')
+            print(f'Subprocess error: {stderr_str}')
+            if filter_result.returncode != 0:
+                return False, {'error': f'Something went wrong when filtering the log file! Ping Temriel.'}
+            try:
+                if os.path.getsize(user_log_file) == 0:
+                    return False, {'error': f'Invalid log key for c{canvas}. Wrong key?'}
+            except FileNotFoundError:
+                return False, {'error': f'Log file not found after filtering. Ping Temriel.'}
+            except Exception as e:
+                return False, {'error': f'An error occurred while accessing the log file: {e}'}
+            filter_end_time = time.time()
+            print(f'filter.exe took {filter_end_time - filter_start_time:.2f}s')
+        else:
+            user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
+            if not os.path.exists(user_log_file):
+                return False, {'error': f'No userlog found, have you generated a placemap for c{canvas} before?'}
         total_pixels, undo, mod = await pixel_counting(user_log_file)
 
         survive_start_time = time.time()

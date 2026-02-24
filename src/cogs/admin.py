@@ -7,6 +7,7 @@ import time
 import re
 import asyncio
 import tib_utility.db_utils as db_utils
+from typing import Optional
 from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, \
     get_linked_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX, resolve_name
 
@@ -247,8 +248,8 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             print(f'An error occurred: {e}')
 
     @group.command(name='force-generate', description='Forcefully generate a placemap for a user (ADMIN ONLY).')
-    @app_commands.describe(user='The user to generate the placemap for.', canvas='What canvas to generate the placemap for.')
-    async def placemap_db_generate_admin(self, interaction: discord.Interaction, user: discord.User, canvas: str):
+    @app_commands.describe(user='The user to generate the placemap for.', canvas='What canvas to generate the placemap for.', nofilter='Skip filtering (only for repeat pladcemaps, much faster but returns if no logkey)')
+    async def placemap_db_generate_admin(self, interaction: discord.Interaction, user: discord.User, canvas: str, nofilter: Optional[bool] = False):
         """Forcefully generate a placemap by piping the necessary arguments to pxlslog-explorer."""
         if not await is_owner_check(interaction):
             await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
@@ -257,7 +258,9 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
         update_channel = interaction.client.get_channel(update_channel_id)
         start_time = time.time()
         await interaction.response.defer(ephemeral=False,thinking=True)
-        state, results = await generate_placemap(user, canvas)
+        if nofilter is not None:
+            nofilter = nofilter
+        state, results = await generate_placemap(user, canvas, nofilter)
 
         if state:
             constructed_desc = await description_format(canvas, results)
