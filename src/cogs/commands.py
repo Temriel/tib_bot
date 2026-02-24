@@ -86,7 +86,13 @@ class Commander(commands.Cog):
         ]
     )
     async def canvas(self, interaction: discord.Interaction, canvas: str, display: Optional[app_commands.Choice[str]] = None):
-        """View a canvas generated via the pxlslog-explorer."""
+        """Send a canvas with 
+
+        Args:
+            interaction (discord.Interaction): Discord user interaction.
+            canvas (str): The canvas to display.
+            display (Optional[app_commands.Choice[str]], optional): The display mode for the canvas. Defaults to None (Final).
+        """
         displayed = display.value if display else 'final'
         await interaction.response.defer(ephemeral=False, thinking=True)
         try:
@@ -109,7 +115,11 @@ class Commander(commands.Cog):
                 
     @app_commands.command(name='notify-me', description='Sign up for DM notifications when Tib is updated with new canvases (run again to unsubscribe).')
     async def notifications(self, interaction: discord.Interaction):
-        """Command to add users to DB for DM notifications"""
+        """Marks a user as willing to get notifications when Tib has new logs.
+
+        Args:
+            interaction (discord.Interaction): Discord user.
+        """
         try:
             cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (interaction.user.id,))
         except Exception as e:
@@ -121,7 +131,6 @@ class Commander(commands.Cog):
             database.commit()
             await interaction.response.send_message('You have been signed up for notifications!', ephemeral=True)
             print(f'{interaction.user} ({interaction.user.id}) signed up for notifications.')
-            return None
         else:
             if result[0] == 1:
                 cursor.execute('UPDATE users SET notif_status = 0 WHERE user_id = ?', (interaction.user.id,))
@@ -133,7 +142,6 @@ class Commander(commands.Cog):
                 database.commit()
                 await interaction.response.send_message('You have been re-subscribed to notifications!', ephemeral=True)
                 print(f'{interaction.user} ({interaction.user.id}) re-subscribed to notifications.')
-            return None
 
 
 async def setup(client):

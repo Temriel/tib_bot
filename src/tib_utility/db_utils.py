@@ -57,7 +57,14 @@ async def get_linked_pxls_username(user_id: int):
 
 
 async def get_linked_discord_username(pxls_username: str):
-    """Get the linked Discord user for a given Pxls username."""
+    """Find if a Pxls user has a linked Discord user or not. 
+
+    Args:
+        pxls_username (str): The Pxls username to query for.
+
+    Returns:
+        int | None: The linked Discord user ID, or None if not found.
+    """
     query = "SELECT user_id FROM users WHERE username = ?"
     cursor.execute(query, (pxls_username,))
     result = cursor.fetchone()
@@ -65,6 +72,14 @@ async def get_linked_discord_username(pxls_username: str):
 
 
 async def resolve_name(identifier: str) -> int | None:
+    """Resolve a given identifier to a Discord user ID. The identifier can be either a Discord user ID or a Pxls username.
+
+    Args:
+        identifier (str): The identifier to resolve (can be a Discord user ID or Pxls username).
+
+    Returns:
+        int | None: The resolved Discord user ID, or None if not found.
+    """
     if identifier.isdigit() and len(identifier) > 16:
         return int(identifier)
     linked_id = await get_linked_discord_username(identifier)
@@ -74,7 +89,14 @@ async def resolve_name(identifier: str) -> int | None:
 
 
 def get_stats(pxls_username: str) -> dict:
-    """Get pixel stats for a given Pxls username."""
+    """Find userstats by quering the DB.
+
+    Args:
+        pxls_username (str): The Pxls usernae to query for.
+
+    Returns:
+        dict: The user's stats (total pixels, rank, and group).
+    """
     query = "SELECT SUM(pixels) FROM points WHERE user = ?"
     cursor.execute(query, (pxls_username,))
     total = cursor.fetchone()[0] or 0
@@ -107,7 +129,17 @@ def get_all_users() -> list[tuple[int, str]]:
 
 async def render(user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str) -> tuple[
     asyncio.subprocess.Process, str, str]:
-    """Render a placemap from a log file. Uses pxlslog-explorer render.exe."""
+    """Render pipeline to make placemaps using filtered user log keys using Etos2's pxlslog-explorer.
+
+    Args:
+        user (Union[discord.User, discord.Member]): For Discord user ID.
+        canvas (str): The canvas to render for.
+        mode (str): The mode to render in. Defaults to normal, and can be virgin, activity, age, milliseconds, minutes, seconds, or combined.
+        user_log_file (str): The filepath to the filtered user log file in question.
+
+    Returns:
+        tuple[asyncio.subprocess.Process, str, str]: The process, filename, and output path.
+    """
     bg, palette_path, output_path = config.paths(canvas, user.id, mode)
     ple_dir = config.pxlslog_explorer_dir
     render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path,
@@ -153,10 +185,26 @@ def read_gpl_palette(palette_path: str):
 # Placemap handling
 
 async def most_active(user_log_file: str) -> tuple[tuple[int, int], int]:
+    """Asyncio function to find most active pixel and how many pixels were placed there.
+
+    Args:
+        user_log_file (str): Filepath to a user log file.
+
+    Returns:
+        tuple[tuple[int, int], int]: The most active coordinates and the number of times they were active.
+    """
     return await asyncio.to_thread(read_most_active, user_log_file)
 
 
 def read_most_active(user_log_file: str):
+    """Find most active pixel and how many pixels were placed there.
+
+    Args:
+        user_log_file (str): Filepath to a user log file.
+
+    Returns:
+        Tuple: The most active coordinates and the number of times they were active.
+    """
     coords = []
     with open(user_log_file, 'r', encoding='utf-8') as f:
         for line in f:
@@ -170,11 +218,26 @@ def read_most_active(user_log_file: str):
 
 
 async def pixel_counting(user_log_file: str):
+    """_summary_
+
+    Args:
+        user_log_file (str): Filepath to a user log file.
+
+    Returns:
+        Tuple: The total number of pixels placed (place - und), the number of undo actions, and the number of mod actions.
+    """
     return await asyncio.to_thread(read_pixel_counting, user_log_file)
 
 
 def read_pixel_counting(user_log_file: str):
-    """Find placement amounts on a canvas"""
+    """_summary_
+
+    Args:
+        user_log_file (str): Filepath to a user log file.
+
+    Returns:
+        Tuple: The total number of pixels placed (place - und), the number of undo actions, and the number of mod actions.
+    """
     with open(user_log_file, 'r') as log_key:
         data = log_key.read()
     place = data.count('user place')
@@ -188,6 +251,11 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
     """Find survival stats on a canvas"""
 
     def process_stats():
+        """Small function to parse a log file and find how many pixels survived, how many were replaced by other users, and how many were replaced by the user themselves.
+
+        Returns:
+            _type_: The number of pixels that survived, the number of pixels that were replaced by other users, and the number of pixels that were replaced by the user themselves.
+        """
         final_state = {}
         replaced_user = 0  # UNUSED
         try:
@@ -239,7 +307,17 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
 
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple[
     int, int]:
-    """Find the amount of pixels placed for TPE on a specified canvas using template images."""
+    """Function to find amount of TPE pixels.
+
+    Args:
+        user_log_file (str): The user log file to parse.
+        temp_pattern (str): The template pattern to use. Defualts to "./template/c{canvas}/*.png".
+        palette_path (str): The path to the palette file.
+        initial_canvas_path (_type_): The path to the initial canvas image.
+
+    Returns:
+        tuple[int, int]: Correct pixels (tpe_place - tpe_grief) and grief pixels (tpe_grief).
+    """
     palette_rgb = [tuple(c) for c in await gpl_palette(palette_path)]
     if not palette_rgb:
         return 0, 0
@@ -352,6 +430,16 @@ async def tpe_pixels_count_canvas(canvas: str, callback=None) -> dict:
 
 
 async def tpe_pixels_count_user_canvas(user_id: Optional[int] = None, canvas: Optional[str] = None, callback=None) -> dict:
+    """Function to find either how much a user has placed on all canvases & what is for TPE, or how much all users one one canvas have placed for TPE.
+
+    Args:
+        user_id (Optional[int], optional): user.id to use. Defaults to None.
+        canvas (Optional[str], optional): canvas to use. Defaults to None.
+        callback (_type_, optional): Callback function to call for progress updates. Defaults to None.
+
+    Returns:
+        dict: A dict linking either canvas or user_id (depending on which function called it) to their respective TPE pixel counts and grief counts.
+    """
     ple_dir = config.pxlslog_explorer_dir
     if not ple_dir:
         print('pxlslog-explorer directory is not configured.')
@@ -400,7 +488,16 @@ async def tpe_pixels_count_user_canvas(user_id: Optional[int] = None, canvas: Op
 
 
 async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], dict], user_id: int, user_log_file, result_key: Optional[Union[int, str]] = None):
-    """Thank you PyCharm for just Making This Work lol"""
+    """Thank you PyCharm for making this work lol.
+
+    Args:
+        canvas (str): Canvas to find stats on.
+        ple_dir (_type_): The pxlslog-explorer directory.
+        results (dict[Union[int, str], dict]): The results dictionary to update.
+        user_id (int): The user ID to find stats for.
+        user_log_file (_type_): The user log file path.
+        result_key (Optional[Union[int, str]], optional): The key to use in the results dictionary. Defaults to None.
+    """
     _, palette_path, _ = config.paths(canvas, user_id, 'normal')
     temp_pattern = os.path.join(ROOT_DIR, 'template', f'c{canvas}', '*.png')
     initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
@@ -422,7 +519,16 @@ async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], di
 
 
 async def generate_placemap(user: Union[discord.User, discord.Member], canvas: str, nofilter: Optional[bool] = False) -> tuple[bool, dict]:
-    """Helper function to generate a placemap. Returns various other user logkey stats as well."""
+    """_summary_
+
+    Args:
+        user (Union[discord.User, discord.Member]): The Discord user who uses the command.
+        canvas (str): The canvas to use.
+        nofilter (Optional[bool], optional): Whether to skip filtering since it's faster. If it fails while True, attempt to generate one anyway. Defaults to False.
+
+    Returns:
+        tuple[bool, dict]: Whether the operation was successful and the results.
+    """
     async with semaphore:
         filter_start_time = time.time()
         get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
@@ -657,7 +763,15 @@ class PlacemapAltView(discord.ui.View):
 
 
 def create_graph(canvases: list[str], pixels: list[int]) -> io.BytesIO:
-    """Generic function to create graphs."""
+    """Function to create a graph.
+
+    Args:
+        canvases (list[str]): Canvases for x-axis.
+        pixels (list[int]): Pixels for each canvas.
+
+    Returns:
+        io.BytesIO: The graph as a BytesIO object.
+    """
     cumulative = []
     current_total = 0
     for pixel in pixels:

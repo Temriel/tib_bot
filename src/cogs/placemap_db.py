@@ -15,6 +15,12 @@ owner_id = config.owner()
 
 # noinspection PyTypeChecker
 class PlacemapDBAdd(discord.ui.Modal, title='Add your log key.'):
+    """Modal to add log keys to the database, with necessary error handling.
+
+    Args:
+        discord (_type_): Since it's a modal, it inherits from discord.ui.Modal. This is also where the input fields are defined.
+        title (str): The title of the modal, set to "Add your log key." It *can* be anything.
+    """
     canvas = discord.ui.TextInput(label='Canvas Number', placeholder='Add canvas number (eg, 28 or 56a).', max_length=4, min_length=1)
     key = discord.ui.TextInput(label='Log key (512 char)', style=discord.TextStyle.paragraph, max_length=512, min_length=512)
     
@@ -50,6 +56,11 @@ class PlacemapDBAdd(discord.ui.Modal, title='Add your log key.'):
 ##############################
 
 async def open_modal(interaction: discord.Interaction):
+    """Open the modal to add a log key.
+
+    Args:
+        interaction (discord.Interaction): Discord user.
+    """
     modal = PlacemapDBAdd()
     await interaction.response.send_modal(modal)
 
@@ -66,7 +77,11 @@ class Placemap(commands.Cog):
 
     @group.command(name='add', description='Add a log key.') # adds a log key to the database using a fancy ass modal
     async def placemap_db_add(self, interaction: discord.Interaction):
-        """Add a logkey to Tib's internal database."""
+        """Command to add a log key to the database. Opens a modal
+
+        Args:
+            interaction (discord.Interaction): Discord user.
+        """
         embed = discord.Embed(
             title='Add your log key', 
             description='''
@@ -84,9 +99,15 @@ class Placemap(commands.Cog):
         await interaction.response.send_message(embed=embed, view=view)
 
     @group.command(name='generate', description='Generate a placemap from a log key.')
-    @app_commands.describe(canvas='What canvas to generate the placemap for.', nofilter='Skip filtering (only for repeat pladcemaps, much faster but returns if no logkey)')
+    @app_commands.describe(canvas='What canvas to generate the placemap for.', nofilter='Skip filtering (only for repeat pladcemaps)')
     async def placemap_db_generate(self, interaction: discord.Interaction, canvas: str, nofilter: Optional[bool] = False):
-        """Generate a placemap by piping the necessary arguments to pxlslog-explorer."""
+        """Generate a placemap by piping the necessary arguments to pxlslog-explorer.
+
+        Args:
+            interaction (discord.Interaction): The Discord user who uses the command.
+            canvas (str): The canvas to use.
+            nofilter (Optional[bool], optional): Whether to skip filtering since it's faster. If it fails while True, attempt to generate one anyway. Defaults to False.
+        """
         user = interaction.user
         update_channel_id = config.update_channel()
         update_channel = interaction.client.get_channel(update_channel_id)
@@ -145,7 +166,11 @@ class Placemap(commands.Cog):
     
     @group.command(name='view', description='View your stored log keys.')
     async def placemap_db_view(self, interaction: discord.Interaction):
-        """View stored logkeys"""
+        """View added logkeys to the bot. Shows if a canvas is considered TPE or not.
+        
+        Args:
+            interaction (discord.Interaction): Who to generate it for (Discord user).
+        """
         user = interaction.user
         query = "SELECT canvas FROM logkey WHERE user = ? ORDER BY CAST(canvas AS INTEGER) DESC, canvas DESC"
         try:
