@@ -121,12 +121,12 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
     @app_commands.describe(userid='The Discord user to link to.', username='The Pxls username to link.')
     async def pixels_db_link(self, interaction: discord.Interaction, userid: discord.User, username: str):
         """Link a Pxls username to a Discord user."""
-        query = "INSERT OR REPLACE INTO users VALUES (?, ?)"
+        query = "INSERT INTO users (user_id, username) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET username = ?"
         try:
             if not await is_owner_check(interaction):
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
                 return
-            cursor.execute(query, (userid.id, username))
+            cursor.execute(query, (userid.id, username, username))
             database.commit()
             await interaction.response.send_message(f'Successfully linked **{username}** to **{userid}**!')
         except sqlite3.IntegrityError:
