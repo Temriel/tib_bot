@@ -36,6 +36,9 @@ database.execute('CREATE TABLE IF NOT EXISTS users (user_id INT, username STR UN
 database.execute('CREATE TABLE IF NOT EXISTS logkey(user INT, canvas STR, key STR, PRIMARY KEY (user, canvas))')
 
 semaphore = asyncio.Semaphore(3)
+global_template_map = {}
+global_initial_canvas = {}
+global_template_cache = {}
 
 
 def db_shutdown():
@@ -307,7 +310,7 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
 
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple[
     int, int]:
-    """Function to find amount of TPE pixels.
+    """Function to find amount of TPE pixels for any given canvas, and for any given user.
 
     Args:
         user_log_file (str): The user log file to parse.
@@ -318,41 +321,55 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     Returns:
         tuple[int, int]: Correct pixels (tpe_place - tpe_grief) and grief pixels (tpe_grief).
     """
+    canvas = os.path.basename(os.path.dirname(temp_pattern))[1:] 
     palette_rgb = [tuple(c) for c in await gpl_palette(palette_path)]
     if not palette_rgb:
         return 0, 0
-
-    template_images = []
-    template_map = []
-    try:
-        initial_canvas_image = Image.open(initial_canvas_path).convert('RGB')
-        initial_canvas = initial_canvas_image.load()
-        template_dir = os.path.dirname(temp_pattern)
-        if os.path.isdir(template_dir):
-            with os.scandir(template_dir) as entries:
-                for entry in entries:
-                    if not entry.is_file():
-                        continue
-                    if not entry.name.lower().endswith('.png'):
-                        continue
-                    path = os.path.join(template_dir, entry.name)
-                    try:
-                        img = Image.open(path).convert('RGBA')
-                        template_images.append(img)
-                        template_map.append(img.load())
-                    except Exception as e:
-                        print(f'Error loading template image {path}: {e}')
-    except FileNotFoundError as e:
-        print(f'{e}')
-        return 0, 0
-
-    if initial_canvas is None:
-        print("No initial canvas found.")
-        return 0, 0
-
+    
+    if canvas not in global_template_map:
+        loading_time_begin = time.time()
+        template_images = []
+        template_map = []
+        try:
+            initial_canvas_image = Image.open(initial_canvas_path).convert('RGB')
+            initial_canvas = initial_canvas_image.load()
+            if initial_canvas is None:
+                print('Failed to load initial canvas image.')
+                return 0, 0
+            template_dir = os.path.dirname(temp_pattern)
+            if os.path.isdir(template_dir):
+                with os.scandir(template_dir) as entries:
+                    for entry in entries:
+                        if not entry.is_file():
+                            continue
+                        if not entry.name.lower().endswith('.png'):
+                            continue
+                        path = os.path.join(template_dir, entry.name)
+                        try:
+                            img = Image.open(path).convert('RGBA')
+                            template_images.append(img)
+                            template_map.append(img.load())
+                        except Exception as e:
+                            print(f'Error loading template image {path}: {e}')
+        except FileNotFoundError as e:
+            print(f'{e}')
+            return 0, 0
+        loading_time_stop = time.time()
+        print(f'template loading took {loading_time_stop - loading_time_begin:.2f}s')
+        global_template_map[canvas] = template_map
+        global_initial_canvas[canvas] = initial_canvas
+        global_template_cache[canvas] = {}
+    else:
+        template_map = global_template_map[canvas]
+        initial_canvas = global_initial_canvas[canvas]
+        if initial_canvas is None:
+            print("Failed to load initial canvas.")
+            return 0, 0
+        
+    template_cache = global_template_cache[canvas]
+    
     tpe_place = {}
     tpe_grief = {}
-    template_cache = {}
 
     with open(user_log_file, newline='') as csvfile:
         reader = csv.reader(csvfile, delimiter='\t')
@@ -382,22 +399,18 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
             is_correct = False
             is_virgin = False
             present = False
-            try:
-                initial_canvas_rgb = initial_canvas[x, y] # for virgin
-            except IndexError:
-                continue
             if coord not in template_cache:
                 correct_colour = set()
                 has_virgin = False
                 for tpe_image in template_map:
                     try:
-                        tpe_image_rgb = tpe_image[x, y] # for tpe check
+                        tpe_image_rgb = tpe_image[x, y]
                         if isinstance(tpe_image_rgb, (tuple, list)) and len(tpe_image_rgb) >= 4:
                             r, g, b, a = tpe_image_rgb
                             if a > 0:
                                 target_rgb = (r, g, b)
                                 correct_colour.add(target_rgb)
-                                if target_rgb == initial_canvas_rgb:
+                                if target_rgb == initial_canvas[x, y]:
                                     has_virgin = True
                     except IndexError:
                         continue
