@@ -22,6 +22,7 @@ async def on_ready():
     print(f'Started. Logged in as {bot.user}.')
     status = discord.CustomActivity(name="Watching over Pxls logs | /help")
     await bot.change_presence(activity=status)
+    asyncio.create_task(db_utils.preload_canvas_cache())
 
 async def load():
     for filename in os.listdir('./cogs'):

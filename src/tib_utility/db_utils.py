@@ -51,6 +51,13 @@ def db_shutdown():
         print(f'Error during DB shutdown: {e}')
 
 
+async def preload_canvas_cache(canvases: Optional[list[str]] = None):
+    if canvases is None:
+        canvases = config.tpe_canvas()
+    for canvas in canvases:
+        await asyncio.to_thread(create_template_cache, canvas)
+
+
 async def get_linked_pxls_username(user_id: int):
     """Get the linked Pxls username for a given Discord user ID."""
     query = "SELECT username FROM users WHERE user_id = ?"
@@ -308,35 +315,18 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
     return await asyncio.to_thread(process_stats)
 
 
-async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple[
-    int, int]:
-    """Function to find amount of TPE pixels for any given canvas, and for any given user.
-
-    Args:
-        user_log_file (str): The user log file to parse.
-        temp_pattern (str): The template pattern to use. Defualts to "./template/c{canvas}/*.png".
-        palette_path (str): The path to the palette file.
-        initial_canvas_path (_type_): The path to the initial canvas image.
-
-    Returns:
-        tuple[int, int]: Correct pixels (tpe_place - tpe_grief) and grief pixels (tpe_grief).
-    """
-    canvas = os.path.basename(os.path.dirname(temp_pattern))[1:] 
-    palette_rgb = [tuple(c) for c in await gpl_palette(palette_path)]
-    if not palette_rgb:
-        return 0, 0
-    
-    if canvas not in global_template_map:
+def create_template_cache(canvas: str):
+     if canvas not in global_template_map:
         loading_time_begin = time.time()
         template_images = []
         template_map = []
         try:
-            initial_canvas_image = Image.open(initial_canvas_path).convert('RGB')
+            initial_canvas_image = Image.open(f'{config.pxlslog_explorer_dir}/pxls-canvas/canvas-{canvas}-initial.png').convert('RGB')
             initial_canvas = initial_canvas_image.load()
             if initial_canvas is None:
                 print('Failed to load initial canvas image.')
                 return 0, 0
-            template_dir = os.path.dirname(temp_pattern)
+            template_dir = os.path.join(ROOT_DIR, 'template', f'c{canvas}')
             if os.path.isdir(template_dir):
                 with os.scandir(template_dir) as entries:
                     for entry in entries:
@@ -355,16 +345,36 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
             print(f'{e}')
             return 0, 0
         loading_time_stop = time.time()
-        print(f'template loading took {loading_time_stop - loading_time_begin:.2f}s')
+        print(f'c{canvas} template loading took {loading_time_stop - loading_time_begin:.2f}s')
         global_template_map[canvas] = template_map
         global_initial_canvas[canvas] = initial_canvas
         global_template_cache[canvas] = {}
-    else:
-        template_map = global_template_map[canvas]
-        initial_canvas = global_initial_canvas[canvas]
-        if initial_canvas is None:
-            print("Failed to load initial canvas.")
-            return 0, 0
+
+
+async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple[
+    int, int]:
+    """Function to find amount of TPE pixels for any given canvas, and for any given user.
+
+    Args:
+        user_log_file (str): The user log file to parse.
+        temp_pattern (str): The template pattern to use. Defualts to "./template/c{canvas}/*.png".
+        palette_path (str): The path to the palette file.
+        initial_canvas_path (_type_): The path to the initial canvas image.
+
+    Returns:
+        tuple[int, int]: Correct pixels (tpe_place - tpe_grief) and grief pixels (tpe_grief).
+    """
+    canvas = os.path.basename(os.path.dirname(temp_pattern))[1:] 
+    palette_rgb = [tuple(c) for c in await gpl_palette(palette_path)]
+    if not palette_rgb:
+        return 0, 0
+    if canvas not in global_template_map:
+        await asyncio.to_thread(create_template_cache, canvas)
+    template_map = global_template_map[canvas]
+    initial_canvas = global_initial_canvas[canvas]
+    if not template_map or initial_canvas is None:
+        print("Failed to load initial canvas.")
+        return 0, 0
         
     template_cache = global_template_cache[canvas]
     
