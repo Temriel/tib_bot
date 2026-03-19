@@ -81,6 +81,13 @@ def paths(canvas: str, user: int, mode: str):
     output_path = f"{output_dir}/c{canvas}_{mode}_{user}.png"
     return bg, palette_path, output_path
 
+def palette_initial_paths(canvas: str):
+    """Other useful paths for Tib."""
+    palette = get_palette(canvas)
+    initial_canvas_path = f"{pxlslog_explorer_dir}/pxls-canvas/canvas-{canvas}-initial.png"
+    palette_path = f"{pxlslog_explorer_dir}/pxls-palette/palette_{palette}.gpl"
+    return palette_path, initial_canvas_path
+
 def tpe_canvas():
     return [ # split 0-9 wise (see below)
         # before che

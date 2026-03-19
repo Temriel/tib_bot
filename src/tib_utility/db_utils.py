@@ -16,6 +16,7 @@ import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
+import glob
 
 CANVAS_REGEX = re.compile(r'^(?![cC])[a-z0-9]{1,4}$')
 KEY_REGEX = re.compile(r'(?=.*[a-z])[a-z0-9]{512}$')
@@ -135,6 +136,35 @@ def get_all_users() -> list[tuple[int, str]]:
     cursor.execute(query)
     results = cursor.fetchall()
     return results
+
+
+async def filter(canvas: str, user_key: str, logfile: str, user_log_file: str, user: Optional[str] = None) -> bool:
+    ple_dir = config.pxlslog_explorer_dir
+    filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', logfile,
+                '--output', user_log_file]
+    filter_result = await asyncio.create_subprocess_exec(
+        *filter_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    print(f'Filtering {user_key} for {user if user else "<unknown>"} on canvas {canvas}.')
+    stdout, stderr = await filter_result.communicate()
+    stdout_str = stdout.decode('utf-8').strip()
+    stderr_str = stderr.decode('utf-8').strip()
+    print(f'Subprocess output: {stdout_str}')
+    print(f'Subprocess error: {stderr_str}')
+    if filter_result.returncode != 0:
+        print(f'filter != 0, something went wrong.')
+        return False
+    try:
+        if os.path.getsize(user_log_file) == 0:
+            print(f'Filtered log file is empty for {user if user else "<unknown>"} on canvas {canvas}.')
+            return False
+    except FileNotFoundError:
+        print('No file found.')
+        return False
+    except Exception as e:
+        print('Something went wrong.')
+        return False
+    return True
 
 
 async def render(user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str) -> tuple[
@@ -351,32 +381,52 @@ def create_template_cache(canvas: str):
         global_template_cache[canvas] = {}
 
 
-async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path) -> tuple[
+async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path, logkey_check_from_user: bool = False, template_from_user: Optional[list[str]] = None) -> tuple[
     int, int]:
     """Function to find amount of TPE pixels for any given canvas, and for any given user.
 
     Args:
         user_log_file (str): The user log file to parse.
-        temp_pattern (str): The template pattern to use. Defualts to "./template/c{canvas}/*.png".
+        temp_pattern (str): The template pattern to use. Defaults to "./template/c{canvas}/*.png".
         palette_path (str): The path to the palette file.
         initial_canvas_path (_type_): The path to the initial canvas image.
-
+        logkey_check_from_user (bool): If True, skips the cache process since this command call comes from regular users using their OWN temp pattern. If False, use the saved ones (see temp_pattern).
+        template_from_user (Optional[list[str]]): A list of paths to template images uploaded by the user.
     Returns:
         tuple[int, int]: Correct pixels (tpe_place - tpe_grief) and grief pixels (tpe_grief).
     """
-    canvas = os.path.basename(os.path.dirname(temp_pattern))[1:] 
+    canvas = os.path.basename(initial_canvas_path).split('-')[1]
     palette_rgb = [tuple(c) for c in await gpl_palette(palette_path)]
     if not palette_rgb:
         return 0, 0
-    if canvas not in global_template_map:
-        await asyncio.to_thread(create_template_cache, canvas)
-    template_map = global_template_map[canvas]
-    initial_canvas = global_initial_canvas[canvas]
+    
+    if logkey_check_from_user:
+        template_map = []
+        template_cache = {}
+        with Image.open(initial_canvas_path).convert('RGB') as initial_canvas_image:
+            initial_canvas = initial_canvas_image.load()
+            if initial_canvas is None:
+                print('Failed to load initial canvas image.')
+                return 0, 0
+        if template_from_user is not None:
+            user_template_files = template_from_user
+        else:
+            user_template_files = glob.glob(temp_pattern)
+        for path in user_template_files:
+            try:
+                img = Image.open(path).convert('RGBA')
+                template_map.append(img.load())
+            except Exception as e:
+                print(f'Error loading template image {path}: {e}')
+    else:
+        if canvas not in global_template_map:
+            await asyncio.to_thread(create_template_cache, canvas)
+        template_map = global_template_map[canvas]
+        initial_canvas = global_initial_canvas[canvas]
+        template_cache = global_template_cache[canvas]
     if not template_map or initial_canvas is None:
         print("Failed to load initial canvas.")
         return 0, 0
-        
-    template_cache = global_template_cache[canvas]
     
     tpe_place = {}
     tpe_grief = {}
@@ -581,28 +631,11 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         
         user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
         if not nofilter or not os.path.exists(user_log_file):
-            filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', logfile,
-                        '--output', user_log_file]
-            filter_result = await asyncio.create_subprocess_exec(
-                *filter_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-            )
-            print(f'Filtering {user_key} for {user} on canvas {canvas}.')
-            stdout, stderr = await filter_result.communicate()
-            stdout_str = stdout.decode('utf-8').strip()
-            stderr_str = stderr.decode('utf-8').strip()
-            print(f'Subprocess output: {stdout_str}')
-            print(f'Subprocess error: {stderr_str}')
-            if filter_result.returncode != 0:
-                return False, {'error': f'Something went wrong when filtering the log file! Ping Temriel.'}
-            try:
-                if os.path.getsize(user_log_file) == 0:
-                    return False, {'error': f'Invalid log key for c{canvas}. Wrong key?'}
-            except FileNotFoundError:
-                return False, {'error': f'Log file not found after filtering. Ping Temriel.'}
-            except Exception as e:
-                return False, {'error': f'An error occurred while accessing the log file: {e}'}
-            filter_end_time = time.time()
-            print(f'filter.exe took {filter_end_time - filter_start_time:.2f}s')
+            success = await filter(canvas, user_key, logfile, user_log_file, user.name)
+            if not success:
+                return False, {'error': f'Filtering failed. Ping Temriel.'}
+        filter_end_time = time.time()
+        print(f'filter.exe took {filter_end_time - filter_start_time:.2f}s')
 
         total_pixels, undo, mod = await pixel_counting(user_log_file)
 
