@@ -8,7 +8,7 @@ from typing import Optional
 # from collections import defaultdict # used previously, cannot remember if this was for error handling or not
 import tib_utility.config as config
 import tib_utility.db_utils as db_utils
-from tib_utility.db_utils import cursor, database, generate_placemap, get_linked_pxls_username, description_format, filter, CANVAS_REGEX, KEY_REGEX, ROOT_DIR
+from tib_utility.db_utils import cursor, database, generate_placemap, get_linked_pxls_username, description_format, filter, CANVAS_REGEX, KEY_REGEX, ROOT_DIR, pixel_counting
 import tempfile
 import os
 import shutil
@@ -111,7 +111,9 @@ class PlacemapDBCheckKeysFromUser(discord.ui.Modal, title='Input desired logkeys
                     logkey_check_from_user=True,
                     template_from_user=self.template_paths
                 )
+                total_pixels, undo, mod = await pixel_counting(user_log_file)
                 results[users] = {
+                    'total': total_pixels,
                     'correct': correct_pixels,
                     'grief': grief_pxiels
                 }
@@ -130,18 +132,20 @@ class PlacemapDBCheckKeysFromUser(discord.ui.Modal, title='Input desired logkeys
             return
         
         cleaned_results = sorted(results.keys(), key=lambda name: results[name].get('correct', 0), reverse=True)
-        header2 = f"{'User':<6} | {'For Temp':>8} | {'Griefed':>7}"
-        header_seperator = f"{'-'*6}-+-{'-'*8}-+-{'-'*7}"
+        header2 = f"{'User':<6} | {'Placed':>7} | {'Correct':>7} | {'Griefed':>7}"
+        header_seperator = f"{'-'*6}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}"
         
+        total_pixels = sum(stats.get('total', 0) for stats in results.values())
+        # yeah tpe. right
         tpe_total = sum(stats.get('correct', 0) for stats in results.values())
         grief_total = sum(stats.get('grief', 0) for stats in results.values())
         
         lines = []
         for name in cleaned_results:
             stats = results[name]
-            line = f"{name:<6} | {stats.get('correct', 0):>8} | {stats.get('grief', 0):>7}"
+            line = f"{name:<6} | {stats.get('total', 0):>7} | {stats.get('correct', 0):>7} | {stats.get('grief', 0):>7}"
             lines.append(line)
-        summary = f"{'Total':<6} | {tpe_total:>8} | {grief_total:>7}"
+        summary = f"{'Total':<6} | {total_pixels:>7} | {tpe_total:>7} | {grief_total:>7}"
         description = f"```\n{header2}\n{header_seperator}\n" + "\n".join(lines) + f"\n{header_seperator}\n{summary}\n```" # AHH BACKTICKS
         embed = discord.Embed(
             title=f'Results for c{self.canvas}', 
