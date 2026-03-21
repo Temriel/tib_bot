@@ -11,6 +11,7 @@ import tib_utility.db_utils as db_utils
 from tib_utility.db_utils import cursor, database, generate_placemap, get_linked_pxls_username, description_format, filter, CANVAS_REGEX, KEY_REGEX, ROOT_DIR
 import tempfile
 import os
+import shutil
 from pathlib import Path
 
 owner_id = config.owner()
@@ -54,6 +55,7 @@ class PlacemapDBAdd(discord.ui.Modal, title='Add your log key.'):
             print(f'An error occurred: {e}')
             return
 
+
 class PlacemapDBCheckKeysFromUser(discord.ui.Modal, title='Input desired logkeys here.'):
     # this is gonna be used for adding the keys ONLY, similar to the above (but moreso the admin version)
     def __init__(self, canvas: str, template_paths: list[str], temp_dir: str):
@@ -61,56 +63,94 @@ class PlacemapDBCheckKeysFromUser(discord.ui.Modal, title='Input desired logkeys
         self.canvas = canvas
         self.template_paths = template_paths
         self.temp_dir = temp_dir
-        self.logkey_1 = discord.ui.TextInput(label='Log key 1 (512 char)', style=discord.TextStyle.paragraph, max_length=512, min_length=512)
-        self.logkey_2 = discord.ui.TextInput(label='Log key 2 (512 char, optional)', style=discord.TextStyle.paragraph, max_length=512, min_length=512, required=False)
-        self.logkey_3 = discord.ui.TextInput(label='Log key 3 (512 char, optional)', style=discord.TextStyle.paragraph, max_length=512, min_length=512, required=False)
-        self.logkey_4 = discord.ui.TextInput(label='Log key 4 (512 char, optional)', style=discord.TextStyle.paragraph, max_length=512, min_length=512, required=False)
-        self.logkey_5 = discord.ui.TextInput(label='Log key 5 (512 char, optional)', style=discord.TextStyle.paragraph, max_length=512, min_length=512, required=False)
-        self.logkey_6 = discord.ui.TextInput(label='Log key 6 (512 char, optional)', style=discord.TextStyle.paragraph, max_length=512, min_length=512, required=False)
-        self.logkey_7 = discord.ui.TextInput(label='Log key 7 (512 char, optional)', style=discord.TextStyle.paragraph, max_length=512, min_length=512, required=False)
-        self.logkey_8 = discord.ui.TextInput(label='Log key 8 (512 char, optional)', style=discord.TextStyle.paragraph, max_length=512, min_length=512, required=False)
-        for i in range(1, 9):
-            self.add_item(getattr(self, f'logkey_{i}'))
+        self.logkeys = discord.ui.TextInput(
+            label='Log keys, seperated by commas',
+            style=discord.TextStyle.paragraph,
+            placeholder='log1,log2,log3,...',
+            min_length=512,
+            max_length=4000,
+        )
+        self.add_item(self.logkeys)
     
     async def on_submit(self, interaction: discord.Interaction): 
-        logkeys = [getattr(self, f'logkey_{i}').value.strip() for i in range(1, 9) if getattr(self, f'logkey_{i}').value.strip()]
+        await interaction.response.send_message('Processing log keys, this may take a while...', ephemeral=True)
+        logkeys = [k.strip() for k in self.logkeys.value.strip().split(',') if k.strip()]
         if not logkeys:
-            await interaction.response.send_message('No logkeys provided.', ephemeral=True)
+            await interaction.edit_original_response(content='No logkeys provided.')
             return
         
         ple_dir = config.pxlslog_explorer_dir
         logfile = f'{ple_dir}/pxls-logs/pixels_c{self.canvas}.sanit.log'
         if not os.path.exists(logfile):
-            await interaction.response.send_message('No log file available for this canvas.', ephemeral=True)
+            await interaction.edit_original_response(content='No log file available for this canvas.')
             return
         palette_path, initial_canvas_path = config.palette_initial_paths(self.canvas)
         
+        results = {}
+        errors = []
+        
         for idx, user_key in enumerate(logkeys, start=1):
+            users = f'User {idx}'
             if not KEY_REGEX.fullmatch(user_key):
-                await interaction.response.send_message(f'Invalid format for log key {idx}! A logkey can only contain a-z and 0-9.', ephemeral=True)
-                return 
+                errors.append(f'Invalid format for log key {idx}! A logkey can only contain a-z and 0-9.')
+                continue
             with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.log') as temp_log:
                 user_log_file = temp_log.name
-                success = await filter(self.canvas, user_key, logfile, user_log_file)
-                if not success:
-                    await interaction.response.send_message(f'Filtering failed for log key {idx}. Ping Temriel.', ephemeral=True)
-                    return
-                try:
-                    correct_pixels, grief_pxiels = await db_utils.tpe_pixels_count(
-                        user_log_file,
-                        temp_pattern='',
-                        palette_path=palette_path,
-                        initial_canvas_path=initial_canvas_path,
-                        logkey_check_from_user=True,
-                        template_from_user=self.template_paths
-                    )
-                except Exception as e:
-                    await interaction.response.send_message(f'An error occurred while counting pixels for log key {idx}: {e}', ephemeral=True)
-                    return
-                finally:
-                    if os.path.exists(user_log_file):
-                        os.unlink(user_log_file)
-
+            success = await filter(self.canvas, user_key, logfile, user_log_file)
+            if not success:
+                errors.append(f'Filtering failed for log key {idx}.')
+                if os.path.exists(user_log_file):
+                    os.unlink(user_log_file)
+                continue
+            try:
+                correct_pixels, grief_pxiels = await db_utils.tpe_pixels_count(
+                    user_log_file,
+                    temp_pattern='',
+                    palette_path=palette_path,
+                    initial_canvas_path=initial_canvas_path,
+                    logkey_check_from_user=True,
+                    template_from_user=self.template_paths
+                )
+                results[users] = {
+                    'correct': correct_pixels,
+                    'grief': grief_pxiels
+                }
+            except Exception as e:
+                errors.append(f'An error occurred while counting pixels for log key {idx}')
+                print(f'An error occurred while counting pixels for log key {idx}: {e}')
+            finally:
+                if os.path.exists(user_log_file):
+                    os.unlink(user_log_file)
+        if not results:
+            if not errors:
+                errors.append('No log keys were processed.')
+            await interaction.edit_original_response(content=f'All log keys failed to process. Errors: (if any)\n' + '\n'.join(errors))
+            if os.path.exists(self.temp_dir):
+                shutil.rmtree(self.temp_dir)
+            return
+        
+        cleaned_results = sorted(results.keys(), key=lambda name: results[name].get('correct', 0), reverse=True)
+        header2 = f"{'User':<6} | {'For Temp':>8} | {'Griefed':>7}"
+        header_seperator = f"{'-'*6}-+-{'-'*8}-+-{'-'*7}"
+        
+        tpe_total = sum(stats.get('correct', 0) for stats in results.values())
+        grief_total = sum(stats.get('grief', 0) for stats in results.values())
+        
+        lines = []
+        for name in cleaned_results:
+            stats = results[name]
+            line = f"{name:<6} | {stats.get('correct', 0):>8} | {stats.get('grief', 0):>7}"
+            lines.append(line)
+        summary = f"{'Total':<6} | {tpe_total:>8} | {grief_total:>7}"
+        description = f"```\n{header2}\n{header_seperator}\n" + "\n".join(lines) + f"\n{header_seperator}\n{summary}\n```" # AHH BACKTICKS
+        embed = discord.Embed(
+            title=f'Results for c{self.canvas}', 
+            description=description,
+            color=discord.Color.purple()
+        )
+        await interaction.edit_original_response(content=None, embed=embed)
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
 
 async def open_add_modal(interaction: discord.Interaction):
     """Open the modal to add a log key.
@@ -121,6 +161,18 @@ async def open_add_modal(interaction: discord.Interaction):
     modal = PlacemapDBAdd()
     await interaction.response.send_modal(modal)
     
+    
+async def open_check_modal(interaction: discord.Interaction, canvas: str, template_paths: list[str], temp_dir: str):
+    """Open the modal to check log keys against user-provided templates.
+
+    Args:
+        interaction (discord.Interaction): Discord user.
+        canvas (str): The canvas code to check.
+        template_paths (list[str]): List of paths to the user-provided template images.
+        temp_dir (str): Path to the temporary directory where the templates are stored.
+    """
+    modal = PlacemapDBCheckKeysFromUser(canvas, template_paths, temp_dir)
+    await interaction.response.send_modal(modal)    
     
 ##############################
 ### DISCORD COMMANDS BELOW ###
@@ -302,17 +354,18 @@ class Placemap(commands.Cog):
         image_9: Optional[discord.Attachment] = None,
         image_10: Optional[discord.Attachment] = None,
     ):
+        await interaction.response.defer(thinking=True, ephemeral=True)
         images = [img for img in (
             image_1, image_2, image_3, image_4, image_5, 
             image_6, image_7, image_8, image_9, image_10
         ) if img]
         if not CANVAS_REGEX.fullmatch(canvas):
-            await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
+            await interaction.followup.send('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
             return
         if not images:
-            await interaction.response.send_message('Please upload at least one template image.', ephemeral=True)
+            await interaction.followup.send('Please upload at least one template image.', ephemeral=True)
             return
-        await interaction.response.send_message('Hi! This is WIP atm.') # to remove
+        print(f'User {interaction.user} is checking templates for canvas {canvas} with {len(images)} images.')
         
         temp_dir = tempfile.mkdtemp()
         template_paths = []
@@ -320,8 +373,18 @@ class Placemap(commands.Cog):
             out_path = Path(temp_dir) / f'template_{idx}.png'
             await img.save(out_path)
             template_paths.append(out_path)
-        modal = PlacemapDBCheckKeysFromUser(canvas, template_paths, temp_dir)
-        await interaction.response.send_modal(modal)
+        embed = discord.Embed(
+            title='Template Pixel Checker:tm:', 
+            description=f'Canvas: `{canvas}`\nNumber of template images: {len(template_paths)}\nYou can input the logkeys by using the button below.',
+            color=discord.Color.purple()
+        )
+        async def button_callback(interaction: discord.Interaction):
+            await open_check_modal(interaction, canvas, template_paths, temp_dir)
+        button = discord.ui.Button(label='Input Log Keys', style=discord.ButtonStyle.primary)
+        button.callback = button_callback
+        view = discord.ui.View()
+        view.add_item(button)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 async def setup(client):
     await client.add_cog(Placemap(client))
