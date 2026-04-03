@@ -1,3 +1,4 @@
+import functools
 import sqlite3
 import asyncio
 import csv
@@ -348,7 +349,6 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
 def create_template_cache(canvas: str):
      if canvas not in global_template_map:
         loading_time_begin = time.time()
-        template_images = []
         template_map = []
         try:
             initial_canvas_image = Image.open(f'{config.pxlslog_explorer_dir}/pxls-canvas/canvas-{canvas}-initial.png').convert('RGB')
@@ -366,9 +366,15 @@ def create_template_cache(canvas: str):
                             continue
                         path = os.path.join(template_dir, entry.name)
                         try:
-                            img = Image.open(path).convert('RGBA')
-                            template_images.append(img)
-                            template_map.append(img.load())
+                            with Image.open(path).convert('RGBA') as img:
+                                bbox = img.getbbox()
+                                if bbox:
+                                    cropped_img = img.crop(bbox)
+                                    template_map.append({
+                                        'img': cropped_img,
+                                        'pixels': cropped_img.load(),
+                                        'bbox': bbox
+                                    })
                         except Exception as e:
                             print(f'Error loading template image {path}: {e}')
         except FileNotFoundError as e:
@@ -402,7 +408,6 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     
     if logkey_check_from_user:
         template_map = []
-        template_cache = {}
         with Image.open(initial_canvas_path).convert('RGB') as initial_canvas_image:
             initial_canvas = initial_canvas_image.load()
             if initial_canvas is None:
@@ -414,8 +419,15 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
             user_template_files = glob.glob(temp_pattern)
         for path in user_template_files:
             try:
-                img = Image.open(path).convert('RGBA')
-                template_map.append(img.load())
+                with Image.open(path).convert('RGBA') as img:
+                    bbox = img.getbbox()
+                    if bbox:
+                        cropped_img = img.crop(bbox)
+                        template_map.append({
+                            'img': cropped_img,
+                            'pixels': cropped_img.load(),
+                            'bbox': bbox
+                        })
             except Exception as e:
                 print(f'Error loading template image {path}: {e}')
     else:
@@ -423,10 +435,29 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
             await asyncio.to_thread(create_template_cache, canvas)
         template_map = global_template_map[canvas]
         initial_canvas = global_initial_canvas[canvas]
-        template_cache = global_template_cache[canvas]
     if not template_map or initial_canvas is None:
         print("Failed to load initial canvas.")
         return 0, 0
+    
+    @functools.lru_cache(maxsize=50000)
+    def get_template_pixel(x, y):
+        correct_colours = set()
+        has_virgin = False
+        for tpe in template_map:
+            bbox = tpe['bbox']
+            if bbox[0] <= x < bbox[2] and bbox[1] <= y < bbox[3]:
+                try:
+                    crop_x = x - bbox[0]
+                    crop_y = y - bbox[1]
+                    pixel = tpe['pixels'][crop_x, crop_y]
+                    if len(pixel) == 4 and pixel[3] > 0:
+                        target_rgb = (pixel[0], pixel[1], pixel[2])
+                        correct_colours.add(target_rgb)
+                        if target_rgb == initial_canvas[x, y]:
+                            has_virgin = True
+                except IndexError:
+                    pass
+        return frozenset(correct_colours), has_virgin
     
     tpe_place = {}
     tpe_grief = {}
@@ -456,33 +487,18 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
                         del tpe_grief[coord]
             if action != 'user place':
                 continue
+            
+            correct_colours, has_virgin = get_template_pixel(x, y)
+            
             is_correct = False
             is_virgin = False
-            present = False
-            if coord not in template_cache:
-                correct_colour = set()
-                has_virgin = False
-                for tpe_image in template_map:
-                    try:
-                        tpe_image_rgb = tpe_image[x, y]
-                        if isinstance(tpe_image_rgb, (tuple, list)) and len(tpe_image_rgb) >= 4:
-                            r, g, b, a = tpe_image_rgb
-                            if a > 0:
-                                target_rgb = (r, g, b)
-                                correct_colour.add(target_rgb)
-                                if target_rgb == initial_canvas[x, y]:
-                                    has_virgin = True
-                    except IndexError:
-                        continue
-                template_cache[coord] = (correct_colour, has_virgin)
-            correct_colour, has_virgin = template_cache[coord]
-
-            if correct_colour:
-                present = True
-                if placed_rgb in correct_colour:
+            present = bool(correct_colours)
+            if present:
+                if placed_rgb in correct_colours:
                     is_correct = True
                 elif has_virgin:
                     is_virgin = True
+                    
             if is_correct or is_virgin: # since it passed the for loop, add as correct
                 tpe_place[coord] = tpe_place.get(coord, 0) + 1
                 tpe_grief.pop(coord, None)
