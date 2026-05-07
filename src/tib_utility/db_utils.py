@@ -56,8 +56,11 @@ def db_shutdown():
 async def preload_canvas_cache(canvases: Optional[list[str]] = None):
     if canvases is None:
         canvases = config.tpe_canvas()
+    start = time.time()
     for canvas in canvases:
         await asyncio.to_thread(create_template_cache, canvas)
+    end = time.time()
+    print(f"Total template loading time: {end - start:.3f}s")
 
 
 async def get_linked_pxls_username(user_id: int):
@@ -381,7 +384,7 @@ def create_template_cache(canvas: str):
             print(f'{e}')
             return 0, 0
         loading_time_stop = time.time()
-        print(f'c{canvas} template loading took {loading_time_stop - loading_time_begin:.2f}s')
+        print(f'c{canvas} template loading took {loading_time_stop - loading_time_begin:.3f}s')
         global_template_map[canvas] = template_map
         global_initial_canvas[canvas] = initial_canvas
         global_template_cache[canvas] = {}
@@ -618,100 +621,108 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
     Returns:
         tuple[bool, dict]: Whether the operation was successful and the results.
     """
-    async with semaphore:
-        filter_start_time = time.time()
-        get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
-        ple_dir = config.pxlslog_explorer_dir
-        logfile = f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log'
-        cursor.execute(get_key, (canvas, user.id))  # does the above
-        user_key = cursor.fetchone()
-        mode = 'normal'
-        _, palette_path, _ = config.paths(canvas, user.id, mode)
+    try:
+        async with semaphore:
+            filter_start_time = time.time()
+            get_key = "SELECT key FROM logkey WHERE canvas=? AND user=?"
+            ple_dir = config.pxlslog_explorer_dir
+            logfile = f'{ple_dir}/pxls-logs/pixels_c{canvas}.sanit.log'
+            cursor.execute(get_key, (canvas, user.id))  # does the above
+            user_key = cursor.fetchone()
+            mode = 'normal'
+            _, palette_path, _ = config.paths(canvas, user.id, mode)
 
-        if not CANVAS_REGEX.fullmatch(canvas):
-            return False, {'error': f'Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.'}
+            if not CANVAS_REGEX.fullmatch(canvas):
+                return False, {'error': f'Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.'}
+            
+            canvas_int = int(''.join(inte for inte in canvas if inte.isdigit()))
+            if canvas_int > 200 and not logfile: # ensures that even 9 years into the future we'll still get placemaps
+                return False, {'error': f'That canvas doesn\'t exist yet, silly.'}
 
-        if not os.path.exists(logfile): 
-            return False, {'error': f'No log file found. Either invalid canvas or the logs haven\'t been added yet.'}
+            if not os.path.exists(logfile): 
+                return False, {'error': f'No log file found. Either invalid canvas or the logs haven\'t been added yet.'}
 
-        if not user_key:
-            return False, {'error': f'No log key found for this canvas.'}
+            if not user_key:
+                return False, {'error': f'No log key found for this canvas.'}
 
-        user_key = user_key[0]
-        if isinstance(user_key, int):
-            return False, {'error': f'Your key is just a bunch of numbers smh.'}
+            user_key = user_key[0]
+            if isinstance(user_key, int):
+                return False, {'error': f'Your key is just a bunch of numbers smh.'}
 
-        user_key = str(user_key)
-        if not KEY_REGEX.fullmatch(user_key):
-            return False, {'error': f'Invalid format! A log key can only contain a-z, and 0-9.'}
-        
-        user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
-        if not nofilter or not os.path.exists(user_log_file):
-            success = await filter(canvas, user_key, logfile, user_log_file, user.name)
-            if not success:
-                return False, {'error': f'Filtering failed. Ping Temriel.'}
-        filter_end_time = time.time()
-        print(f'filter.exe took {filter_end_time - filter_start_time:.2f}s')
+            user_key = str(user_key)
+            if not KEY_REGEX.fullmatch(user_key):
+                return False, {'error': f'Invalid format! A log key can only contain a-z, and 0-9.'}
+            
+            user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
+            if not nofilter or not os.path.exists(user_log_file):
+                success = await filter(canvas, user_key, logfile, user_log_file, user.name)
+                if not success:
+                    return False, {'error': f'Filtering failed. Ping Temriel.'}
+            filter_end_time = time.time()
+            print(f'filter.exe took {filter_end_time - filter_start_time:.2f}s')
 
-        total_pixels, undo, mod = await pixel_counting(user_log_file)
+            total_pixels, undo, mod = await pixel_counting(user_log_file)
 
-        survive_start_time = time.time()
-        replaced_user, replaced_other, survived = await survival(user_log_file,
-                                                                 f'{ple_dir}/pxls-final-canvas/canvas-{canvas}-final.png',
-                                                                 await gpl_palette(palette_path))
-        survived_perc = (survived / total_pixels * 100) if total_pixels > 0 else 0
-        survived_perc = f'{survived_perc:.2f}'
-        survive_end_time = time.time()
+            survive_start_time = time.time()
+            replaced_user, replaced_other, survived = await survival(user_log_file,
+                                                                    f'{ple_dir}/pxls-final-canvas/canvas-{canvas}-final.png',
+                                                                    await gpl_palette(palette_path))
+            survived_perc = (survived / total_pixels * 100) if total_pixels > 0 else 0
+            survived_perc = f'{survived_perc:.2f}'
+            survive_end_time = time.time()
 
-        active_start_time = time.time()
-        (active_x, active_y), active_count = await most_active(user_log_file)
-        active_end_time = time.time()
+            active_start_time = time.time()
+            (active_x, active_y), active_count = await most_active(user_log_file)
+            active_end_time = time.time()
 
-        print(f'{total_pixels} pixels placed')
-        print(f'{undo} pixels undone')
-        print(f'{active_x, active_y} with {active_count} pixels (took {active_end_time - active_start_time:.2f}s)')
-        print(f'{mod} mod overwrites')
-        print(f'{survived} ({survived_perc}%) pixels survived (took {survive_end_time - survive_start_time:.2f}s)')
-        print(f'{replaced_user} pixels replaced by self')
-        print(f'{replaced_other} pixels replaced by others')
+            print(f'{total_pixels} pixels placed')
+            print(f'{undo} pixels undone')
+            print(f'{active_x, active_y} with {active_count} pixels (took {active_end_time - active_start_time:.2f}s)')
+            print(f'{mod} mod overwrites')
+            print(f'{survived} ({survived_perc}%) pixels survived (took {survive_end_time - survive_start_time:.2f}s)')
+            print(f'{replaced_user} pixels replaced by self')
+            print(f'{replaced_other} pixels replaced by others')
 
-        tpe_pixels = 0
-        tpe_griefs = 0
-        if config.tpe(canvas):
-            tpe_start_time = time.time()
-            temp_pattern = os.path.join(ROOT_DIR, 'template', f'c{canvas}', '*.png')
-            initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
-            tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path,
-                                                            initial_canvas_path)
-            tpe_end_time = time.time()
-            print(f'{tpe_pixels} pixels placed for TPE (took {tpe_end_time - tpe_start_time:.2f}s)')
-            print(f'{tpe_griefs} pixels griefed')
+            tpe_pixels = 0
+            tpe_griefs = 0
+            if config.tpe(canvas):
+                tpe_start_time = time.time()
+                temp_pattern = os.path.join(ROOT_DIR, 'template', f'c{canvas}', '*.png')
+                initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
+                tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path,
+                                                                initial_canvas_path)
+                tpe_end_time = time.time()
+                print(f'{tpe_pixels} pixels placed for TPE (took {tpe_end_time - tpe_start_time:.2f}s)')
+                print(f'{tpe_griefs} pixels griefed')
 
-        render_start_time = time.time()
-        render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
-        render_end_time = time.time()
-        print(f'render.exe took {render_end_time - render_start_time:.2f}s')
+            render_start_time = time.time()
+            render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
+            render_end_time = time.time()
+            print(f'render.exe took {render_end_time - render_start_time:.2f}s')
 
-        if render_result.returncode != 0:
-            return False, {'error': f'Something went wrong when generating the placemap! Ping Temriel.'}
-        return True, {
-            'total_pixels': total_pixels,  # placed - undo
-            'undo': undo,  # reverses a pixel
-            'mod': mod,  # mod overwrites, not included in total_pixels & is almost always 0
-            'active_x': active_x,
-            'active_y': active_y,
-            'active_count': active_count, # most active pixel (& num placements there)
-            'survived': survived,  # pixels that are the same as the "final" state of the canvas
-            'survived_perc': survived_perc,  # above but % form
-            'replaced_user': replaced_user,  # pixels replaced by self
-            'replaced_other': replaced_other,  # pixels replaced by others
-            'tpe_pixels': tpe_pixels,  # for tpe - griefs
-            'tpe_griefs': tpe_griefs,  # just griefs. not always accurate
-            'filename': filename,
-            'output_path': output_path,
-            'user_log_file': user_log_file,
-            'mode': mode  # defaults to normal
-        }
+            if render_result.returncode != 0:
+                return False, {'error': f'Something went wrong when generating the placemap! Ping Temriel.'}
+            return True, {
+                'total_pixels': total_pixels,  # placed - undo
+                'undo': undo,  # reverses a pixel
+                'mod': mod,  # mod overwrites, not included in total_pixels & is almost always 0
+                'active_x': active_x,
+                'active_y': active_y,
+                'active_count': active_count, # most active pixel (& num placements there)
+                'survived': survived,  # pixels that are the same as the "final" state of the canvas
+                'survived_perc': survived_perc,  # above but % form
+                'replaced_user': replaced_user,  # pixels replaced by self
+                'replaced_other': replaced_other,  # pixels replaced by others
+                'tpe_pixels': tpe_pixels,  # for tpe - griefs
+                'tpe_griefs': tpe_griefs,  # just griefs. not always accurate
+                'filename': filename,
+                'output_path': output_path,
+                'user_log_file': user_log_file,
+                'mode': mode  # defaults to normal
+            }
+    except Exception as e:
+        print(f'Somethinmg went wrong when making a placemap: {e}')
+        return False, {'error': f'Something went wrong!? The following was caught: {e}'}
 
 
 async def description_format(canvas: str, results: dict) -> str:

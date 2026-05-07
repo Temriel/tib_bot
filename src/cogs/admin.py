@@ -33,7 +33,7 @@ class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
             user_canvases = [x.strip() for x in self.user_canvas.value.split(',')]
             keys = [x.strip() for x in self.key.value.split(',')]
             if len(user_canvases) < 2:
-                await interaction.response.send_message('You must provide a user ID and at least one canvas.', ephemeral=True)
+                await interaction.response.send_message('You must provide a user ID and at least one canvas.', ephemeral=True) # dumbass
                 return
 
             first_item = user_canvases[0]
@@ -163,6 +163,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
     async def pixels_db_add(self, interaction: discord.Interaction, user: str, canvas: str, pixels: int):
         """Add pixels to a user in the database. Needed values are user, canvas & pixels."""
         query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)" # the reason we define query is to make sure cursor.execute isn't Huge
+        current_channel = interaction.channel
         try:
             if not await is_owner_check(interaction):
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
@@ -195,15 +196,19 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                         f'**{user}** should now be part of **{new_group}** with the rank of **{new_rank}**. They have **{new_total}** pixels placed.')
             message = f'{"Added" if pixels >= 0 else "Removed"} {abs(pixels)} {"pixel" if pixels == -1 or pixels == 1 else "pixels"} for {user} on c{canvas}!'
             await interaction.response.send_message(message)
+            if current_channel == update_channel: # to avoid repeat messages in update_channel
+                to_update = False
             if isinstance(update_channel, (discord.TextChannel, discord.Thread)):
-                if to_update: await update_channel.send(message)
-            print (message)
+                if to_update: 
+                    await update_channel.send(message)
+            print(message)
         except Exception as e:
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
 
     @group.command(name='notify-users', description='Notify all users who signed up for notifications about a new canvas (ADMIN ONLY).')
-    async def notifications_admin(self, interaction: discord.Interaction):
+    @app_commands.describe(canvas='(OPTIONAL) The canvas to specify.')
+    async def notifications_admin(self, interaction: discord.Interaction, canvas: str):
         """Notify all users who signed up for notifications about a new canvas (ADMIN ONLY)."""
         await interaction.response.defer(ephemeral=True)
         if not await is_owner_check(interaction):
@@ -221,8 +226,12 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                     user = self.client.get_user(user_id)
                     if user is None:
                         user = await self.client.fetch_user(user_id)
-                    if user:
+                    if user and not canvas:
                         await user.send('Tib now has the latest canvas in its DB, you can now create placemaps as you wish.')
+                        notified_count += 1
+                        await asyncio.sleep(0.1)
+                    else:
+                        await user.send(f'Tib now has canvas {canvas} in its DB, you can now create placemaps as you wish.')
                         notified_count += 1
                         await asyncio.sleep(0.1)
                 except discord.Forbidden:
@@ -317,6 +326,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             if not await is_owner_check(interaction):
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
                 return
+            force_check_start = time.time()
             await interaction.response.defer(ephemeral=True, thinking=True)
             progress = await interaction.followup.send(f'Checking how many pixels <@{user.id}> has placed on all recorded canvases...', ephemeral=True, wait=True)
             
@@ -345,7 +355,9 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 tpe_griefs = stats.get('tpe_griefs', 0)
                 line = f"{'c'+canvas:<6} | {total_pixels:>7} | {tpe_pixels:>7} | {tpe_griefs:>7}"
                 lines.append(line)
-                
+            
+            force_check_end = time.time()
+            force_elapsed_time = force_check_end - force_check_start
             summary = f"{'-'*6}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}\n{'Total':<6} | {pixels_total:>7} | {tpe_total:>7} | {grief_total:>7}"
             chunks = []
             current_chunk = f'{header}\n```{header2}\n{header_seperator}'
@@ -369,6 +381,9 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                     name=user.global_name or user.name, 
                     icon_url=user.avatar.url if user.avatar else user.default_avatar.url
                     )
+                first_embed.set_footer(
+                    text=f'Generated in {force_elapsed_time:.2f}s'
+                )
                 await progress.edit(content=None, embed=first_embed)
                 if len(chunks) > 1:
                     for chunk in chunks[1:]:
@@ -390,6 +405,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             if not await is_owner_check(interaction):
                 await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
                 return
+            force_check_start = time.time()
             await interaction.response.defer(ephemeral=True, thinking=True)
             progress = await interaction.followup.send(f'Checking how many pixels have been placed on canvas {canvas}...', ephemeral=True, wait=True)
             async def callback(current_user_id, idx, total):
@@ -419,7 +435,9 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 name = linked_users.get(user_id, str(user_id))
                 line = f"{name:<20} | {total_pixels:>7} | {tpe_pixels:>7} | {tpe_griefs:>7}"
                 lines.append(line)
-                
+            
+            force_check_end = time.time()
+            force_elapsed_time = force_check_end - force_check_start
             summary = f"{'-'*20}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}\n{'Total':<20} | {pixels_total:>7} | {tpe_total:>7} | {grief_total:>7}"
             chunks = []
             current_chunk = f'```{header2}\n{header_seperator}'
@@ -439,7 +457,9 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                     description=chunks[0],
                     color=discord.Color.purple()
                     )
-
+                first_embed.set_footer(
+                    text=f'Generated in {force_elapsed_time:.2f}s'
+                )
                 await progress.edit(content=None, embed=first_embed)
                 if len(chunks) > 1:
                     for chunk in chunks[1:]:

@@ -198,7 +198,7 @@ class Placemap(commands.Cog):
         """Command to add a log key to the database. Opens a modal
 
         Args:
-            interaction (discord.Interaction): Discord user.
+            interaction (discord.Interaction): Discord user (the one who calls the command).
         """
         embed = discord.Embed(
             title='Add your log key', 
@@ -224,7 +224,7 @@ class Placemap(commands.Cog):
         Args:
             interaction (discord.Interaction): The Discord user who uses the command.
             canvas (str): The canvas to use.
-            nofilter (Optional[bool], optional): Whether to skip filtering since it's faster. If it fails while True, attempt to generate one anyway. Defaults to False.
+            nofilter (Optional[bool], optional): Whether to skip filtering since it's faster. If it fails while True, attempt to generate one anyway. Defaults to False. This is done in case someone happens to input a wrong key or SOMETHING, so it's best to try and make a new one at all times.
         """
         user = interaction.user
         update_channel_id = config.update_channel()
@@ -235,18 +235,17 @@ class Placemap(commands.Cog):
         await interaction.response.defer(ephemeral=False,thinking=True)
         state, results = await generate_placemap(user, canvas, nofilter)
 
-        if state:
-            constructed_desc = await description_format(canvas, results)
-            mode = results.get("mode", "0")
-            user_log_file = results.get("user_log_file", "0")
-        else:
+        if not state:
             await interaction.followup.send(results['error'])
             return
+        constructed_desc = await description_format(canvas, results)
+        mode = results.get("mode", "0")
+        user_log_file = results.get("user_log_file", "0")
         pxls_username = await get_linked_pxls_username(user.id)
         if not pxls_username:
             pxls_username = user.global_name or user.name
 
-        if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
+        if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread): # only try if there's one set
             embed = discord.Embed(
             title=f'{pxls_username} on c{canvas}', 
             description=f'**User ID:** {user.id}\n{constructed_desc}',
@@ -330,6 +329,9 @@ class Placemap(commands.Cog):
             embed.set_author(
                 name=user.name, 
                 icon_url=user.avatar.url if user.avatar else user.default_avatar.url
+                )
+            embed.set_footer(
+                text=f'Black = Key added\nPurple = TPE canvas'
                 )
             await interaction.response.send_message(embed=embed)
             

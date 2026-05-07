@@ -224,7 +224,7 @@ class Database(commands.Cog):
 
         cog_dir = os.path.dirname(os.path.abspath(__file__))
         src_dir = os.path.dirname(cog_dir)
-        font_path = os.path.join(src_dir, "font.ttf") # can be any, as long as it's in the main folder
+        font_path = os.path.join(src_dir, "font.ttf") # can be any, as long as it's in the main folder. We use the Minecraft font tho
         font_size = 24
         page_size = 30
 
@@ -287,7 +287,7 @@ class Database(commands.Cog):
                     last = i
                     
             if first is None or last is None:
-                await interaction.followup.send(f'No TPE data found for {internal_pxls_username}.', ephemeral=True)
+                await interaction.followup.send(f'Something went wrong when organising the data for {internal_pxls_username}. Please ping Temriel.', ephemeral=True)
                 return
             for c in config.tpe_canvas()[first:last+1]:
                 canvases.append(f"c{c}")
@@ -305,7 +305,7 @@ class Database(commands.Cog):
                 )
             embed.set_image(url=f'attachment://{file.filename}')
 
-            if internal_discord_user:
+            if internal_discord_user: # so the embed can be fancier
                 embed.set_author(
                     name=internal_discord_user.global_name or internal_discord_user.name,
                     icon_url=internal_discord_user.avatar.url if internal_discord_user.avatar else internal_discord_user.default_avatar.url,
@@ -345,7 +345,8 @@ class Database(commands.Cog):
                         first = i
                     last = i
             if first is None or last is None:
-                await interaction.followup.send('No TPE data found.', ephemeral=True)
+                await interaction.followup.send('Something went wrong (there\'s data but it\'s not right.)', ephemeral=True)
+                print("Generating /graph all went wrong... somehow.")
                 return
             for c in config.tpe_canvas()[first:last+1]:
                 canvases.append(f"c{c}")
@@ -364,7 +365,7 @@ class Database(commands.Cog):
             embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
             await interaction.followup.send(embed=embed, file=file)
             
-        except Exception as e:
+        except Exception as e: # if something other than a lack of data happens
             await interaction.followup.send("An error occurred.", ephemeral=True)
             print(f"An error occurred: {e}")
 
