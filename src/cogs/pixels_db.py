@@ -246,7 +246,7 @@ class Database(commands.Cog):
         # handles input
         if pxlsuser and discorduser or pxlsuser:
             if not USERNAME_REGEX.fullmatch(pxlsuser):
-                await interaction.response.send_message('Invalid username', ephemeral=True)
+                await interaction.followup.send('Invalid username', ephemeral=True)
                 return
             internal_pxls_username = pxlsuser
             linked_discord = await get_linked_discord_username(internal_pxls_username)
@@ -259,14 +259,14 @@ class Database(commands.Cog):
             internal_pxls_username = await get_linked_pxls_username(discorduser.id)
             internal_discord_user = discorduser
             if not internal_pxls_username:
-                await interaction.response.send_message(f'{discorduser} does not have a linked Pxls username (yet)', ephemeral=True)
+                await interaction.followup.send(f'{discorduser} does not have a linked Pxls username (yet)', ephemeral=True)
                 return
         # no arguments provided, uses interaction user (errors again if no pxls username)
         else:
             internal_discord_user = interaction.user
             internal_pxls_username = await get_linked_pxls_username(internal_discord_user.id)
             if not internal_pxls_username:
-                await interaction.response.send_message(f'You do not have a linked Pxls username (yet).', ephemeral=True)
+                await interaction.followup.send(f'You do not have a linked Pxls username (yet).', ephemeral=True)
                 return
         # handles the Graphering
         try:

@@ -373,7 +373,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 chunks.append(current_chunk)
             if chunks:
                 first_embed = discord.Embed(
-                    title=f'Stats for {user.global_name} ({user.name})',
+                    title=f'Stats for {user.global_name} ({user.name}), {len(lines)} canvases',
                     description=chunks[0],
                     color=discord.Color.purple()
                     )
@@ -426,6 +426,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             tpe_total = sum(stats.get('tpe_pixels', 0) for stats in results.values())
             grief_total = sum(stats.get('tpe_griefs', 0) for stats in results.values())
             lines = []
+            num_tpe_users = 0
             
             for user_id in cleaned_results:
                 stats = results.get(user_id, {})
@@ -435,6 +436,8 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 name = linked_users.get(user_id, str(user_id))
                 line = f"{name:<20} | {total_pixels:>7} | {tpe_pixels:>7} | {tpe_griefs:>7}"
                 lines.append(line)
+                if tpe_pixels != 0:
+                    num_tpe_users += 1
             
             force_check_end = time.time()
             force_elapsed_time = force_check_end - force_check_start
@@ -453,7 +456,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 chunks.append(current_chunk)
             if chunks:
                 first_embed = discord.Embed(
-                    title=f'Logfile-based leaderboard for c{canvas}',
+                    title=f'Logfile-based leaderboard for c{canvas}, {num_tpe_users} TPE users, {len(lines)} total',
                     description=chunks[0],
                     color=discord.Color.purple()
                     )
