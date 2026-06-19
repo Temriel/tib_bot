@@ -8,6 +8,7 @@ import io
 import time
 from typing import Union, Optional
 import discord
+from discord import app_commands
 from PIL import Image
 import tib_utility.config as config
 from functools import lru_cache
@@ -33,9 +34,11 @@ cursor = database.cursor()
 cursor.execute('PRAGMA journal_mode=WAL;')
 cursor.execute('PRAGMA synchronous=NORMAL;')
 cursor.execute('PRAGMA temp_store=MEMORY;')
-database.execute('CREATE TABLE IF NOT EXISTS points(user STR, canvas STR, pixels INT, PRIMARY KEY (user, canvas))')
-database.execute('CREATE TABLE IF NOT EXISTS users (user_id INT, username STR UNIQUE, notif_status BOOLEAN DEFAULT 0, PRIMARY KEY (user_id))')
+cursor.execute('PRAGMA foreign_keys=ON;')
+database.execute('CREATE TABLE IF NOT EXISTS pixels(user STR, canvas STR, pixels INT, PRIMARY KEY (user, canvas))')
+database.execute('CREATE TABLE IF NOT EXISTS users(user_id INT, username STR UNIQUE, notif_status BOOLEAN DEFAULT 0, PRIMARY KEY (user_id))')
 database.execute('CREATE TABLE IF NOT EXISTS logkey(user INT, canvas STR, key STR, PRIMARY KEY (user, canvas))')
+database.execute('CREATE TABLE IF NOT EXISTS points(user STR, canvas STR, points INT, comment STR)')
 
 semaphore = asyncio.Semaphore(3)
 global_template_map = {}
@@ -112,7 +115,7 @@ def get_stats(pxls_username: str) -> dict:
     Returns:
         dict: The user's stats (total pixels, rank, and group).
     """
-    query = "SELECT SUM(pixels) FROM points WHERE user = ?"
+    query = "SELECT SUM(pixels) FROM pixels WHERE user = ?"
     cursor.execute(query, (pxls_username,))
     total = cursor.fetchone()[0] or 0
     rank = "nothing"
@@ -807,6 +810,10 @@ class PlacemapAltView(discord.ui.View):
         else:
             await interaction.followup.send(embed=embed)
 
+    #@discord.ui.button(label='Highlight TPE', style=discord.ButtonStyle.primary, custom_id='tpe')
+    #async def tpe_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    #    button.disabled = True
+
     async def generate_alt(self, mode: str) -> tuple[
         discord.Embed, Optional[discord.File]]:
         """Function to generate "age" and "activity" placemaps."""
@@ -890,3 +897,23 @@ def create_graph(canvases: list[str], pixels: list[int]) -> io.BytesIO:
     plt.close(fig)
     
     return buffer
+
+async def points_comment_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    """Autocomplete function for points comment.
+
+    Args:
+        interaction (discord.Interaction): The interaction to autocomplete for.
+        current (str): The current value being typed by the user.
+
+    Returns:
+        list[discord.app_commands.Choice[str]]: The list of autocomplete choices.
+    """
+    comments = [
+        "Chat Message",
+        "Art suggested",
+        "Operations"
+    ]
+    return [
+        app_commands.Choice(name=comment, value=comment)
+        for comment in comments if current.lower() in comment.lower()
+    ][:25]

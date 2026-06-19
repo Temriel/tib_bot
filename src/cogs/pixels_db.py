@@ -211,10 +211,10 @@ class Database(commands.Cog):
             if not CANVAS_REGEX.fullmatch(canvas):
                 await interaction.response.send_message('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
                 return
-            get_users_canvas = "SELECT user, SUM(pixels) as total_all FROM points WHERE canvas=? GROUP BY user ORDER BY total_all DESC"
+            get_users_canvas = "SELECT user, SUM(pixels) as total_all FROM pixels WHERE canvas=? GROUP BY user ORDER BY total_all DESC"
             cursor.execute(get_users_canvas, (canvas,)) # does the above
         else: 
-            get_users_all = "SELECT user, SUM(pixels) as total_all FROM points GROUP BY user ORDER BY total_all DESC"
+            get_users_all = "SELECT user, SUM(pixels) as total_all FROM pixels GROUP BY user ORDER BY total_all DESC"
             cursor.execute(get_users_all) # does the above
         all_pixels = cursor.fetchall() # defines all_pixels to be the thing we got from the database
         if not all_pixels:
@@ -270,7 +270,7 @@ class Database(commands.Cog):
                 return
         # handles the Graphering
         try:
-            cursor.execute("SELECT canvas, pixels FROM points WHERE user = ?", (internal_pxls_username,))
+            cursor.execute("SELECT canvas, pixels FROM pixels WHERE user = ?", (internal_pxls_username,))
             data = cursor.fetchall()
             if not data:
                 await interaction.followup.send(f'No data found for {internal_pxls_username}.', ephemeral=True)
@@ -326,9 +326,9 @@ class Database(commands.Cog):
         await interaction.response.defer(thinking=True)
         start_time = time.time()
         try:
-            cursor.execute("SELECT canvas, SUM(pixels) FROM points GROUP BY canvas")
+            cursor.execute("SELECT canvas, SUM(pixels) FROM pixels GROUP BY canvas")
             data = cursor.fetchall()
-            cursor.execute("SELECT COUNT(DISTINCT user) FROM points")
+            cursor.execute("SELECT COUNT(DISTINCT user) FROM pixels")
             active_users = cursor.fetchone()[0]
             if not data:
                 await interaction.followup.send('No data found.', ephemeral=True)

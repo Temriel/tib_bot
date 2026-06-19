@@ -19,7 +19,7 @@ async def find_data():
     users = get_all_users()
     users_db_data = {str(row[1]): row[0] for row in users} # since this returns (user_id, username)
     
-    pixel_query = "SELECT user, SUM(pixels) as total_all FROM points GROUP BY user"
+    pixel_query = "SELECT user, SUM(pixels) as total_all FROM pixels GROUP BY user"
     cursor.execute(pixel_query)
     pixels_db_data = {str(row[0]): row[1] for row in cursor.fetchall()} # since this returns (user, pixels)
     

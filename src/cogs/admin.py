@@ -9,7 +9,8 @@ import asyncio
 import tib_utility.db_utils as db_utils
 from typing import Optional
 from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, \
-    get_linked_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX, resolve_name
+    get_linked_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX, resolve_name, \
+    points_comment_autocomplete
 
 
 async def is_owner_check(interaction: discord.Interaction) -> bool:
@@ -162,7 +163,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
     @app_commands.describe(user='The user to add pixels to.', canvas='Canvas number (no c).', pixels='Amount placed.')
     async def pixels_db_add(self, interaction: discord.Interaction, user: str, canvas: str, pixels: int):
         """Add pixels to a user in the database. Needed values are user, canvas & pixels."""
-        query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?)" # the reason we define query is to make sure cursor.execute isn't Huge
+        query = "INSERT OR REPLACE INTO pixels VALUES (?, ?, ?)" # the reason we define query is to make sure cursor.execute isn't Huge
         current_channel = interaction.channel
         try:
             if not await is_owner_check(interaction):
@@ -195,6 +196,42 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                         await update_channel.send(
                         f'**{user}** should now be part of **{new_group}** with the rank of **{new_rank}**. They have **{new_total}** pixels placed.')
             message = f'{"Added" if pixels >= 0 else "Removed"} {abs(pixels)} {"pixel" if pixels == -1 or pixels == 1 else "pixels"} for {user} on c{canvas}!'
+            await interaction.response.send_message(message)
+            if current_channel == update_channel: # to avoid repeat messages in update_channel
+                to_update = False
+            if isinstance(update_channel, (discord.TextChannel, discord.Thread)):
+                if to_update: 
+                    await update_channel.send(message)
+            print(message)
+        except Exception as e:
+            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            print(f'An error occurred: {e}')
+    
+    @group.command(name='add-points', description='Add points to a user (ADMIN ONLY)')
+    @app_commands.describe(user='The user to add points to.', canvas='Canvas number (no c).', points='Amount of points to add.', comment='A comment for the points.')
+    @app_commands.autocomplete(comment=points_comment_autocomplete)
+    async def pixels_db_points_add(self, interaction: discord.Interaction, user: str, canvas: str, points: int, comment: str):
+        """Add points to a user, with optional comments."""
+        query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?, ?)"
+        current_channel = interaction.channel
+        try:
+            if not await is_owner_check(interaction):
+                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+                return
+            if not isinstance(canvas, str):
+                canvas = str(canvas)
+            if not CANVAS_REGEX.fullmatch(canvas):
+                await interaction.response.send_message("Invalid format! A canvas code can only contain a-z and 0-9.", ephemeral=True)
+                return
+            cursor.execute(query, (str(user), canvas, points, comment))
+            database.commit()
+            update_channel_id = config.update_channel()
+            update_channel = interaction.client.get_channel(update_channel_id)
+            to_update = True
+            if not isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
+                await interaction.response.send_message("update_channel_id not configured")
+                to_update = False
+            message = f'{"Added" if points >= 0 else "Removed"} {abs(points)} {"point" if points == -1 or points == 1 else "points"} for {user} on c{canvas}! Additional information: {comment}'
             await interaction.response.send_message(message)
             if current_channel == update_channel: # to avoid repeat messages in update_channel
                 to_update = False
