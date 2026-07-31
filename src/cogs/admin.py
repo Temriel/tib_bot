@@ -13,10 +13,17 @@ from tib_utility.db_utils import cursor, database, get_stats, generate_placemap,
     points_comment_autocomplete
 
 
-async def is_owner_check(interaction: discord.Interaction) -> bool:
-    """Check if the user is the owner of the bot. Is usually used to return a function immediately."""
-    return interaction.user.id == config.owner()
+class NotOwner(commands.CheckFailure):
+    """Custom exception for when a user is not the owner of the bot."""
+    pass 
 
+def owner_only():
+    async def is_owner_check(interaction: discord.Interaction) -> bool:
+        """Check if the user is the owner of the bot. Is usually used to return a function immediately."""
+        if interaction.user.id == config.owner():
+            return True
+        raise NotOwner()
+    return app_commands.check(is_owner_check)
 class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
     # noinspection PyTypeChecker
     user_canvas = discord.ui.TextInput(label='userID/name, canvas', placeholder='uID,28,30a,59 OR 56a,uID1,uID2,uID3', style=discord.TextStyle.short, max_length=200)
@@ -27,10 +34,6 @@ class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
         query_logkey = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)"
         query_user = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
         try:
-            if not await is_owner_check(interaction):
-                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-                return
-
             user_canvases = [x.strip() for x in self.user_canvas.value.split(',')]
             keys = [x.strip() for x in self.key.value.split(',')]
             if len(user_canvases) < 2:
@@ -118,15 +121,14 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
         print('Admin cog loaded.')
 
     group = app_commands.Group(name="admin", description="Admin only commands :3")
+
     @group.command(name='link', description='Link a Pxls username with a Discord user (ADMIN ONLY).')
+    @owner_only()
     @app_commands.describe(userid='The Discord user to link to.', username='The Pxls username to link.')
     async def pixels_db_link(self, interaction: discord.Interaction, userid: discord.User, username: str):
         """Link a Pxls username to a Discord user."""
         query = "INSERT INTO users (user_id, username) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET username = ?"
         try:
-            if not await is_owner_check(interaction):
-                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-                return
             cursor.execute(query, (userid.id, username, username))
             database.commit()
             await interaction.response.send_message(f'Successfully linked **{username}** to **{userid}**!')
@@ -137,6 +139,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             print(f'An error occurred: {e}')
 
     @group.command(name='unlink', description='Unlink a Pxls username from a Discord user (ADMIN ONLY).')
+    @owner_only()
     @app_commands.describe(username='The Pxls username to unlink.')
     async def pixels_db_unlink(self, interaction: discord.Interaction, username: str):
         """Unlink a Pxls username from a Discord user."""
@@ -145,9 +148,6 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             await interaction.response.send_message('Invalid username', ephemeral=True)
             return
         try:
-            if not await is_owner_check(interaction):
-                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-                return
             cursor.execute(query, (username,))
             database.commit()
             if cursor.rowcount > 0:
@@ -160,15 +160,13 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
 
     # Pxls related logic
     @group.command(name='add-pixels', description='Add pixels to a user (ADMIN ONLY)')
+    @owner_only()
     @app_commands.describe(user='The user to add pixels to.', canvas='Canvas number (no c).', pixels='Amount placed.')
     async def pixels_db_add(self, interaction: discord.Interaction, user: str, canvas: str, pixels: int):
         """Add pixels to a user in the database. Needed values are user, canvas & pixels."""
         query = "INSERT OR REPLACE INTO pixels VALUES (?, ?, ?)" # the reason we define query is to make sure cursor.execute isn't Huge
         current_channel = interaction.channel
         try:
-            if not await is_owner_check(interaction):
-                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-                return
             if not isinstance(canvas, str):
                 canvas = str(canvas)
             if not CANVAS_REGEX.fullmatch(canvas):
@@ -208,6 +206,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             print(f'An error occurred: {e}')
     
     @group.command(name='add-points', description='Add points to a user (ADMIN ONLY)')
+    @owner_only()
     @app_commands.describe(user='The user to add points to.', canvas='Canvas number (no c).', points='Amount of points to add.', comment='A comment for the points.')
     @app_commands.autocomplete(comment=points_comment_autocomplete)
     async def pixels_db_points_add(self, interaction: discord.Interaction, user: str, canvas: str, points: int, comment: str):
@@ -215,9 +214,6 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
         query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?, ?)"
         current_channel = interaction.channel
         try:
-            if not await is_owner_check(interaction):
-                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-                return
             if not isinstance(canvas, str):
                 canvas = str(canvas)
             if not CANVAS_REGEX.fullmatch(canvas):
@@ -244,13 +240,11 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             print(f'An error occurred: {e}')
 
     @group.command(name='notify-users', description='Notify all users who signed up for notifications about a new canvas (ADMIN ONLY).')
+    @owner_only()
     @app_commands.describe(canvas='(OPTIONAL) The canvas to specify.')
     async def notifications_admin(self, interaction: discord.Interaction, canvas: str):
         """Notify all users who signed up for notifications about a new canvas (ADMIN ONLY)."""
         await interaction.response.defer(ephemeral=True)
-        if not await is_owner_check(interaction):
-            await interaction.followup.send("You do not have permission to use this command :3", ephemeral=True)
-            return
         cursor.execute('SELECT user_id FROM users WHERE notif_status = 1')
         users_to_notify = cursor.fetchall()
         if not users_to_notify:
@@ -280,12 +274,10 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
         await interaction.followup.send(f'Notifying {len(users_to_notify)} users.', ephemeral=True)
 
     @group.command(name='force-add', description='Force add a logkey for a user (ADMIN ONLY).') 
+    @owner_only()
     async def placemap_db_add_admin(self, interaction: discord.Interaction):
         """Add a logkey forcefully"""
         try:
-            if not await is_owner_check(interaction):
-                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-                return
             modal = PlacemapDBAddAdmin()
             await interaction.response.send_modal(modal)
 
@@ -294,12 +286,10 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             print(f'An error occurred: {e}')
 
     @group.command(name='force-generate', description='Forcefully generate a placemap for a user (ADMIN ONLY).')
+    @owner_only()
     @app_commands.describe(user='The user to generate the placemap for.', canvas='What canvas to generate the placemap for.', nofilter='Skip filtering (only for repeat pladcemaps, much faster but returns if no logkey)')
     async def placemap_db_generate_admin(self, interaction: discord.Interaction, user: discord.User, canvas: str, nofilter: Optional[bool] = False):
         """Forcefully generate a placemap by piping the necessary arguments to pxlslog-explorer."""
-        if not await is_owner_check(interaction):
-            await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-            return
         update_channel_id = config.update_channel()
         update_channel = interaction.client.get_channel(update_channel_id)
         start_time = time.time()
@@ -356,13 +346,11 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             return
     
     @group.command(name='force-check-user', description='Forcefully check how many pixels a user has placed on all recorded canvases (ADMIN ONLY).')
+    @owner_only()
     @app_commands.describe(user='The user to check (user ID works too).')
     async def placemap_db_force_check_user(self, interaction: discord.Interaction, user: discord.User):
         """Checks how many pixels a user has placed for TPE using logkeys - going past the limit of /logkey generate only checking after the feature was implemented."""
         try:
-            if not await is_owner_check(interaction):
-                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-                return
             force_check_start = time.time()
             await interaction.response.defer(ephemeral=True, thinking=True)
             progress = await interaction.followup.send(f'Checking how many pixels <@{user.id}> has placed on all recorded canvases...', ephemeral=True, wait=True)
@@ -435,13 +423,11 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             return
 
     @group.command(name='force-check-canvas', description='Forcefully check how many pixels all users have placed on a specific canvas (ADMIN ONLY).')
+    @owner_only()
     @app_commands.describe(canvas='What canvas to check (no c).')
     async def placemap_db_force_check_canvas(self, interaction: discord.Interaction, canvas: str):
         """Checks how many pixels all users have placed for TPE on a specific canvas using logkeys - going past the limit of /logkey generate only checking after the feature was implemented."""
         try:
-            if not await is_owner_check(interaction):
-                await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-                return
             force_check_start = time.time()
             await interaction.response.defer(ephemeral=True, thinking=True)
             progress = await interaction.followup.send(f'Checking how many pixels have been placed on canvas {canvas}...', ephemeral=True, wait=True)

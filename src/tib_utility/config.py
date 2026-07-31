@@ -8,8 +8,15 @@ def owner():
     """Defining an owner within Tib."""
     owner_id = os.getenv("OWNER_ID")
     if owner_id is None:
-        raise ValueError("owner_id not set!")
+        raise ValueError("OWNER_ID not set!")
     return int(owner_id)
+
+def authorised():
+    """Defining users with more perms within Tib."""
+    authorised_ids = os.getenv("AUTHORISED_ID")
+    if authorised_ids is None:
+        raise ValueError("AUTHORISED_ID not set!")
+    return [int(id.strip()) for id in authorised_ids.split(',')]
 
 def update_channel():
     """Channel for Tib status updates (rankups, placemap stats, etc.)"""
@@ -59,7 +66,7 @@ def get_palette(canvas: str):
             return 11
         case "61"|"62"|"63"|"64"|"64a"|"65"|"65a"|"66"|"67"|"67a"|"68"|"69"|"70"|"71"|"72"|"73"|"74"|"75":
             return 12
-        case "76"|"77"|"78"|"78a"|"79"|"80"|"81"|"82"|"83"|"84"|"85"|"86"|"87"|"88"|"88a"|"89"|"90"|"91"|"92"|"93"|"94"|"95"|"96"|"97"|"98"|"99": # longest palette ever, christ
+        case "76"|"77"|"78"|"78a"|"79"|"80"|"81"|"82"|"83"|"84"|"85"|"86"|"87"|"88"|"88a"|"89"|"90"|"91"|"92"|"93"|"94"|"95"|"96"|"97"|"98"|"99"|"100"|"100a"|"101"|"102": # longest palette ever, christ
             return 13
         case "21a":
             return "gimmick_1"
@@ -99,7 +106,8 @@ def tpe_canvas():
         # after che, expand with new canvases
         "81", "82", "83", "84", "85", "86", "87", "88", "88a", "89", 
         "90", "91", "92", "93", "93a", "94", "95", "96", "97", "98", "98a", "99", 
-        "100"
+        "100", "100a", "101", "102", "103", "104", "105", "106", "107", "108", "109", 
+        "110", "111", "112", "113", "114"
         ]
 
 def tpe(canvas: str):

@@ -4,6 +4,8 @@ from discord.ext import commands
 import os
 from dotenv import load_dotenv
 import logging
+from cogs.admin import NotOwner
+from cogs.points_db import NotAuth
 import tib_utility.config as config
 import tib_utility.db_utils as db_utils
 import importlib
@@ -23,6 +25,11 @@ async def on_ready():
     status = discord.CustomActivity(name="Watching over Pxls logs | /help")
     await bot.change_presence(activity=status)
     asyncio.create_task(db_utils.preload_canvas_cache())
+
+@bot.event
+async def on_app_command_error(interaction, error):
+    if isinstance(error, NotOwner) or isinstance(error, NotAuth):
+        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
 
 async def load():
     for filename in os.listdir('./cogs'):
