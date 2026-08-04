@@ -8,7 +8,7 @@ from typing import Optional
 # from collections import defaultdict # used previously, cannot remember if this was for error handling or not
 import tib_utility.config as config
 import tib_utility.db_utils as db_utils
-from tib_utility.db_utils import cursor, database, generate_placemap, get_linked_pxls_username, description_format, filter, CANVAS_REGEX, KEY_REGEX, ROOT_DIR, pixel_counting
+from tib_utility.db_utils import cursor, database, generate_placemap, get_linked_pxls_username, placemap_description_format, filter, CANVAS_REGEX, KEY_REGEX, ROOT_DIR, pixel_counting
 import tempfile
 import os
 import shutil
@@ -238,7 +238,7 @@ class Placemap(commands.Cog):
         if not state:
             await interaction.followup.send(results['error'])
             return
-        constructed_desc = await description_format(canvas, results)
+        constructed_desc = await placemap_description_format(canvas, results)
         mode = results.get("mode", "0")
         user_log_file = results.get("user_log_file", "0")
         pxls_username = await get_linked_pxls_username(user.id)

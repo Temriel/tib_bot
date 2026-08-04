@@ -39,6 +39,9 @@ database.execute('CREATE TABLE IF NOT EXISTS pixels(user STR, canvas STR, pixels
 database.execute('CREATE TABLE IF NOT EXISTS users(user_id INT, username STR UNIQUE, notif_status BOOLEAN DEFAULT 0, PRIMARY KEY (user_id))')
 database.execute('CREATE TABLE IF NOT EXISTS logkey(user INT, canvas STR, key STR, PRIMARY KEY (user, canvas))')
 database.execute('CREATE TABLE IF NOT EXISTS points(user STR, canvas STR, points INT, comment STR)')
+database.execute('CREATE TABLE IF NOT EXISTS operations(operation_id INT, operation_name STR, phase_amount INT, op_multiplier INT, start_time DATETIME, end_time DATETIME, PRIMARY KEY (operation_id))')
+database.execute('CREATE TABLE IF NOT EXISTS operation_phases(operation_id INT, phase INT, phase_multiplier INT, start_time DATETIME, end_time DATETIME, corrected INT, PRIMARY KEY (operation_id, phase))')
+database.execute('CREATE TABLE IF NOT EXISTS operation_log(user STR, start_time DATETIME, end_time DATETIME, operation_id INT, operation_name STR, phase INT, start_pixels INT, end_pixels INT, PRIMARY KEY (user, start_time))')
 
 semaphore = asyncio.Semaphore(3)
 global_template_map = {}
@@ -393,6 +396,42 @@ def create_template_cache(canvas: str):
         global_template_cache[canvas] = {}
 
 
+def create_points_cache(canvas: str):
+    if canvas not in global_template_cache:
+        global_template_cache[canvas] = {}
+    
+    points_path = os.path.join(ROOT_DIR, 'template', f'c{canvas}', 'points.png')
+    if not os.path.exists(points_path):
+        print(f'Points image not found for canvas {canvas}.')
+        return
+    
+    try:
+        with Image.open(points_path).convert('RGBA') as points_img:
+            points_data = points_img.load()
+            bbox = points_img.getbbox()
+            global_template_cache[canvas]['points'] = {
+                'points_data': points_data,
+                'bbox': bbox,
+                'size': points_img.size
+            }
+    except Exception as e:
+        print(f'An error occured: {e}')
+        global_template_cache[canvas]['points_map'] = None
+
+
+def placemap_modifier(rgb_colour: tuple) -> int:
+    colour_map = {
+        (255, 0, 0): 2, # OUTLINES # red / FF0000
+        (0, 255, 0): 3, # OPERATIONS # green / 00FF00
+        (0, 255, 255): 1, # "don't count any as griefs, but only register correct pixels" # Cyan / 00FFFF
+        (255, 0, 255): 1, # "count all pixels here regardless" # magenta / FF00FF 
+    }
+
+    if rgb_colour in colour_map:
+        return colour_map[rgb_colour]
+    return 0
+
+
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path, logkey_check_from_user: bool = False, template_from_user: Optional[list[str]] = None) -> tuple[
     int, int]:
     """Function to find amount of TPE pixels for any given canvas, and for any given user.
@@ -728,7 +767,7 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
         return False, {'error': f'Something went wrong!? The following was caught: {e}'}
 
 
-async def description_format(canvas: str, results: dict) -> str:
+async def placemap_description_format(canvas: str, results: dict) -> str:
     """Generate description string for placemap embed."""
     total_pixels = results.get("total_pixels", 0)
     undo = results.get("undo", 0)
@@ -911,7 +950,9 @@ async def points_comment_autocomplete(interaction: discord.Interaction, current:
     comments = [
         "Chat Message",
         "Art suggested",
-        "Operations"
+        "Operations",
+        "Outlines",
+        "General"
     ]
     return [
         app_commands.Choice(name=comment, value=comment)

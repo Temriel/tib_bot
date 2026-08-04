@@ -9,21 +9,27 @@ import asyncio
 import tib_utility.db_utils as db_utils
 from typing import Optional
 from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, \
-    get_linked_pxls_username, tpe_pixels_count_canvas, description_format, CANVAS_REGEX, KEY_REGEX, resolve_name, \
+    get_linked_pxls_username, tpe_pixels_count_canvas, placemap_description_format, CANVAS_REGEX, KEY_REGEX, resolve_name, \
     points_comment_autocomplete
 
 
-class NotOwner(commands.CheckFailure):
+class NotOwner(app_commands.CheckFailure):
     """Custom exception for when a user is not the owner of the bot."""
     pass 
 
+
 def owner_only():
     async def is_owner_check(interaction: discord.Interaction) -> bool:
-        """Check if the user is the owner of the bot. Is usually used to return a function immediately."""
-        if interaction.user.id == config.owner():
-            return True
-        raise NotOwner()
+        if interaction.user.id != config.owner():
+            await interaction.response.send_message(
+                "You do not have permission to use this command :3",
+                ephemeral=True,
+            )
+            return False
+        return True
     return app_commands.check(is_owner_check)
+
+
 class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
     # noinspection PyTypeChecker
     user_canvas = discord.ui.TextInput(label='userID/name, canvas', placeholder='uID,28,30a,59 OR 56a,uID1,uID2,uID3', style=discord.TextStyle.short, max_length=200)
@@ -299,7 +305,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
         state, results = await generate_placemap(user, canvas, nofilter)
 
         if state:
-            constructed_desc = await description_format(canvas, results)
+            constructed_desc = await placemap_description_format(canvas, results)
             mode = results.get("mode", "0")
             user_log_file = results.get("user_log_file", "0")
         else:

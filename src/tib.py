@@ -26,11 +26,6 @@ async def on_ready():
     await bot.change_presence(activity=status)
     asyncio.create_task(db_utils.preload_canvas_cache())
 
-@bot.event
-async def on_app_command_error(interaction, error):
-    if isinstance(error, NotOwner) or isinstance(error, NotAuth):
-        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
-
 async def load():
     for filename in os.listdir('./cogs'):
         if filename.endswith('.py'):
@@ -45,6 +40,7 @@ async def cleanup():
     db_utils.db_shutdown() # make sure files are synced properly
     await bot_close()
 bot.close = cleanup
+
                 
 # all commands in this file are just for making sure the bot Actually Works
 @tree.command(name='shutdown', description='Shut down the bot (ADMIN ONLY)')
