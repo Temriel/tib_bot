@@ -35,13 +35,71 @@ cursor.execute('PRAGMA journal_mode=WAL;')
 cursor.execute('PRAGMA synchronous=NORMAL;')
 cursor.execute('PRAGMA temp_store=MEMORY;')
 cursor.execute('PRAGMA foreign_keys=ON;')
-database.execute('CREATE TABLE IF NOT EXISTS pixels(user STR, canvas STR, pixels INT, PRIMARY KEY (user, canvas))')
-database.execute('CREATE TABLE IF NOT EXISTS users(user_id INT, username STR UNIQUE, notif_status BOOLEAN DEFAULT 0, PRIMARY KEY (user_id))')
-database.execute('CREATE TABLE IF NOT EXISTS logkey(user INT, canvas STR, key STR, PRIMARY KEY (user, canvas))')
-database.execute('CREATE TABLE IF NOT EXISTS points(user STR, canvas STR, points INT, comment STR)')
-database.execute('CREATE TABLE IF NOT EXISTS operations(operation_id INT, operation_name STR, phase_amount INT, op_multiplier INT, start_time DATETIME, end_time DATETIME, PRIMARY KEY (operation_id))')
-database.execute('CREATE TABLE IF NOT EXISTS operation_phases(operation_id INT, phase INT, phase_multiplier INT, start_time DATETIME, end_time DATETIME, corrected INT, PRIMARY KEY (operation_id, phase))')
-database.execute('CREATE TABLE IF NOT EXISTS operation_log(user STR, start_time DATETIME, end_time DATETIME, operation_id INT, operation_name STR, phase INT, start_pixels INT, end_pixels INT, PRIMARY KEY (user, start_time))')
+database.execute('''
+    CREATE TABLE IF NOT EXISTS pixels (
+        user STR,
+        canvas STR,
+        pixels INT,
+        PRIMARY KEY (user, canvas)
+    )
+''')
+database.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INT,
+        username STR UNIQUE,
+        notif_status BOOLEAN DEFAULT 0,
+        PRIMARY KEY (user_id)
+    )
+''')
+database.execute('''
+    CREATE TABLE IF NOT EXISTS logkey (
+        user INT,
+        canvas STR,
+        key STR,
+        PRIMARY KEY (user, canvas)
+    )
+''')
+database.execute('''
+    CREATE TABLE IF NOT EXISTS points (
+        user STR,
+        canvas STR,
+        points INT,
+        comment STR
+    )
+''')
+database.execute('''
+    CREATE TABLE IF NOT EXISTS operations (
+        operation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_name STR,
+        phase_amount INT,
+        op_multiplier INT,
+        start_time DATETIME,
+        end_time DATETIME
+    )
+''')
+database.execute('''
+    CREATE TABLE IF NOT EXISTS operation_phases (
+        operation_id INTEGER,
+        phase INT,
+        phase_multiplier INT,
+        start_time DATETIME,
+        end_time DATETIME,
+        PRIMARY KEY (operation_id, phase)
+    )
+''')
+database.execute('''
+    CREATE TABLE IF NOT EXISTS operation_log (
+        user STR,
+        start_time DATETIME,
+        end_time DATETIME,
+        operation_id INTEGER,
+        phase INT,
+        start_pixels INT,
+        end_pixels INT,
+        corrected INT,
+        PRIMARY KEY (user, start_time)
+    )
+''')
 
 semaphore = asyncio.Semaphore(3)
 global_template_map = {}

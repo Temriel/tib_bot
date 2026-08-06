@@ -48,7 +48,7 @@ class Commander(commands.Cog):
         categories = {}
         for cog in self.client.cogs.values():
             cog_name = cog.__class__.__name__.lower()
-            if cog_name == 'admin':
+            if cog_name == 'admin' or cog_name == 'points':
                 continue
             category = COG_CATEGORIES.get(cog_name, cog.__class__.__name__)
             found_commands = getattr(cog, '__cog_app_commands__', [])
