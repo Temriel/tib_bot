@@ -34,7 +34,7 @@ cursor = database.cursor()
 cursor.execute('PRAGMA journal_mode=WAL;')
 cursor.execute('PRAGMA synchronous=NORMAL;')
 cursor.execute('PRAGMA temp_store=MEMORY;')
-cursor.execute('PRAGMA foreign_keys=ON;')
+cursor.execute('PRAGMA foreign_keys=ON')
 database.execute('''
     CREATE TABLE IF NOT EXISTS pixels (
         user STR,
@@ -69,7 +69,7 @@ database.execute('''
 ''')
 database.execute('''
     CREATE TABLE IF NOT EXISTS operations (
-        operation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE,
         operation_name STR,
         phase_amount INT,
         op_multiplier INT,
@@ -84,7 +84,8 @@ database.execute('''
         phase_multiplier INT,
         start_time DATETIME,
         end_time DATETIME,
-        PRIMARY KEY (operation_id, phase)
+        PRIMARY KEY (operation_id, phase),
+        FOREIGN KEY (operation_id) REFERENCES operations(operation_id)
     )
 ''')
 database.execute('''
@@ -97,7 +98,9 @@ database.execute('''
         start_pixels INT,
         end_pixels INT,
         corrected INT,
-        PRIMARY KEY (user, start_time)
+        PRIMARY KEY (user, phase, user)
+        FOREIGN KEY (operation_id) REFERENCES operations(operation_id)
+        FOREIGN KEY (operation_id, phase) REFERENCES operation_phases(operation_id, phase)
     )
 ''')
 
