@@ -98,7 +98,7 @@ database.execute('''
         start_pixels INT,
         end_pixels INT,
         corrected INT,
-        PRIMARY KEY (user, phase, user)
+        PRIMARY KEY (user, operation_id, phase)
         FOREIGN KEY (operation_id) REFERENCES operations(operation_id)
         FOREIGN KEY (operation_id, phase) REFERENCES operation_phases(operation_id, phase)
     )

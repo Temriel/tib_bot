@@ -371,7 +371,7 @@ class Placemap(commands.Cog):
         if not images:
             await interaction.followup.send('Please upload at least one template image.', ephemeral=True)
             return
-        print(f'User {interaction.user} is checking templates for canvas {canvas} with {len(images)} images.')
+        print(f'User {interaction.user} ({interaction.user.id}) is checking templates for canvas {canvas} with {len(images)} {"image" if len(images) == 1 else "images"}.')
         
         temp_dir = tempfile.mkdtemp()
         template_paths = []

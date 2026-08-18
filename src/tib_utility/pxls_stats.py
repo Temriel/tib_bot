@@ -41,26 +41,29 @@ class Stats(commands.Cog):
                 await asyncio.sleep(3)
 
     async def parse_stats(self, username, data=None):
-        if data is None:
-            data = await self.get_stats()
-        if data is None:
-            return None
-        if isinstance(username, str):
-            username = [username]
-        elif isinstance(username, tuple):
-            username = list(username)
-        elif not isinstance(username, list):
-            raise ValueError("username must be a string, list, or tuple")
+        try:
+            if data is None:
+                data = await self.get_stats()
+            if data is None:
+                return None
+            if isinstance(username, str):
+                username = [username]
+            elif isinstance(username, tuple):
+                username = list(username)
+            elif not isinstance(username, list):
+                raise ValueError("username must be a string, list, or tuple")
 
-        results = {}
+            results = {}
 
-        for userdata in data["toplist"]["canvas"]:
-            current_username = userdata["username"]
-            if current_username in username:
-                results[current_username] = {"pixels": userdata["pixels"]}
-                if len(results) == len(username):
-                    break
-        return results
+            for userdata in data["toplist"]["canvas"]:
+                current_username = userdata["username"]
+                if current_username in username:
+                    results[current_username] = {"pixels": userdata["pixels"]}
+                    if len(results) == len(username):
+                        break
+            return results
+        except Exception as e:
+            print(e)
 
 #    @tasks.loop(seconds=60)
 #    async def update_stats(self):
