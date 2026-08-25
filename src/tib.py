@@ -92,7 +92,7 @@ async def reload_cogs(interaction: discord.Interaction):
             try:
                 await bot.reload_extension(f'cogs.{filename[:-3]}')
                 print(f'{filename[:-3]} successfully reloaded.')
-                reload.append(f'{filename[:-3]} successfully reloaded.')
+                reload.append(f'`{filename[:-3]}` successfully reloaded.') # backticks
             except Exception as e:
                 print(f'Failed to reload {filename[:-3]}: {e}')
                 reload.append(f'Failed to reload {filename[:-3]}, check terminal.')
@@ -100,7 +100,15 @@ async def reload_cogs(interaction: discord.Interaction):
         message = '\n'.join(reload)
     else:
         message = 'No cogs found.'
-    await interaction.response.send_message(message, ephemeral=True)
+    embed = discord.Embed( 
+        description=message,
+        color=discord.Color.red()
+        )
+    embed.set_author(
+        name=interaction.user.global_name or interaction.user.name, 
+        icon_url=interaction.user.avatar.url if interaction.user.avatar else interaction.user.default_avatar.url
+        )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 async def main():
     await load()

@@ -64,7 +64,11 @@ database.execute('''
         user STR,
         canvas STR,
         points INT,
-        comment STR
+        operation_id INT,
+        phase INT,
+        comment STR,
+        FOREIGN KEY (operation_id) REFERENCES operations(operation_id)
+        FOREIGN KEY (operation_id, phase) REFERENCES operation_phases(operation_id, phase)
     )
 ''')
 database.execute('''

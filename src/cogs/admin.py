@@ -217,7 +217,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
     @app_commands.autocomplete(comment=points_comment_autocomplete)
     async def pixels_db_points_add(self, interaction: discord.Interaction, user: str, canvas: str, points: int, comment: str):
         """Add points to a user, with optional comments."""
-        query = "INSERT OR REPLACE INTO points VALUES (?, ?, ?, ?)"
+        query = "INSERT OR REPLACE INTO points (user, canvas, points, comment) VALUES (?, ?, ?, ?)"
         current_channel = interaction.channel
         try:
             if not isinstance(canvas, str):

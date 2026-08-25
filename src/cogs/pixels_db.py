@@ -31,6 +31,7 @@ class LeaderboardView(discord.ui.View):
     
     def generate_embed(self):
         """Generate an embed for /list, applies to pages too."""
+        # fuck this god damn function i hate you. i hate you. I hate you.
         # getting page function, font, and headers
         page_pixels, _ = create_pages(self.all_pixels, self.current_page, self.page_size)
         font = ImageFont.truetype(self.font_path, self.font_size)
@@ -229,11 +230,11 @@ class Database(commands.Cog):
         page_size = 30
 
         view = LeaderboardView(all_pixels, font_path, font_size, page_size, canvas=canvas)
-        embed, file = view.generate_embed()
+        fuck_you_file, file = view.generate_embed()
         end_time = time.time()
         elapsed_time = end_time - start_time
-        embed.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {view.current_page}/{view.total_pages}')
-        await interaction.response.send_message(embed=embed, file=file, view=view)
+        fuck_you_file.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {view.current_page}/{view.total_pages}')
+        await interaction.response.send_message(embed=fuck_you_file, file=file, view=view)
     
     group = app_commands.Group(name="graph", description="View stats through GRAPHS:tm:")
 
