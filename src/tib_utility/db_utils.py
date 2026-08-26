@@ -29,6 +29,8 @@ SRC_DIR = CUR_DIR.parents[1]
 ROOT_DIR = CUR_DIR.parents[2]
 DB_PATH = SRC_DIR / 'database.db'
 
+PIXELS_PER_POINT = 10 # 10 pixels for 1 point
+
 database = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = database.cursor()
 cursor.execute('PRAGMA journal_mode=WAL;')
@@ -472,10 +474,10 @@ def create_points_cache(canvas: str):
     
     try:
         with Image.open(points_path).convert('RGBA') as points_img:
-            points_data = points_img.load()
             bbox = points_img.getbbox()
             global_template_cache[canvas]['points'] = {
-                'points_data': points_data,
+                'img': points_img.copy(),
+                'pixels': points_img.load(),
                 'bbox': bbox,
                 'size': points_img.size
             }
@@ -484,21 +486,19 @@ def create_points_cache(canvas: str):
         global_template_cache[canvas]['points_map'] = None
 
 
-def placemap_modifier(rgb_colour: tuple) -> int:
+def placemap_modifier(rgb_colour: tuple) -> Optional[str]:
     colour_map = {
-        (255, 0, 0): 2, # OUTLINES # red / FF0000
-        (0, 255, 0): 3, # OPERATIONS # green / 00FF00
-        (0, 255, 255): 1, # "don't count any as griefs, but only register correct pixels" # Cyan / 00FFFF
-        (255, 0, 255): 1, # "count all pixels here regardless" # magenta / FF00FF 
+        (255, 0, 0): 'outlines', # 2x # OUTLINES # red / FF0000 
+        (0, 0, 255): 'operations_x2', # 2x # OPERATIONS MISC # blue / 0000FF 
+        (0, 255, 0): 'operations_x3', # 3x # OPERATIONS # green / 00FF00 
+        (0, 255, 255): 'no_grief_only_correct', # x1 # "don't count any as griefs, but only register correct pixels" # Cyan / 00FFFF 
+        (255, 0, 255): 'count_all', # x1 # "count all pixels here regardless" # magenta / FF00FF 
     }
-
-    if rgb_colour in colour_map:
-        return colour_map[rgb_colour]
-    return 0
+    return colour_map.get(rgb_colour)
 
 
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path, logkey_check_from_user: bool = False, template_from_user: Optional[list[str]] = None) -> tuple[
-    int, int]:
+    int, int, dict]:
     """Function to find amount of TPE pixels for any given canvas, and for any given user.
 
     Args:
@@ -514,7 +514,7 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     canvas = os.path.basename(initial_canvas_path).split('-')[1]
     palette_rgb = [tuple(c) for c in await gpl_palette(palette_path)]
     if not palette_rgb:
-        return 0, 0
+        return 0, 0, {}
     
     if logkey_check_from_user:
         template_map = []
@@ -522,7 +522,7 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
             initial_canvas = initial_canvas_image.load()
             if initial_canvas is None:
                 print('Failed to load initial canvas image.')
-                return 0, 0
+                return 0, 0, {}
         if template_from_user is not None:
             user_template_files = template_from_user
         else:
@@ -547,7 +547,24 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
         initial_canvas = global_initial_canvas[canvas]
     if not template_map or initial_canvas is None:
         print("Failed to load initial canvas.")
-        return 0, 0
+        return 0, 0, {}
+
+    if canvas in global_template_cache and "points" not in global_template_cache[canvas]:
+        create_points_cache(canvas)
+    points_map = global_template_cache.get(canvas, {}).get("points")
+    def get_category(x, y):
+        if not points_map:
+            return 1 # default modifier
+        bbox = points_map["bbox"]
+        if not bbox or not (bbox[0] <= x < bbox[2] and bbox[1] <= y < bbox[3]):
+            return 1
+        try:
+            pixel = points_map["pixels"][x, y]
+            if len(pixel) == 4 and pixel[3] > 0:
+                return placemap_modifier((pixel[0], pixel[1], pixel[2]))
+        except IndexError:
+            pass
+        return 1    
     
     @functools.lru_cache(maxsize=50000)
     def get_template_pixel(x, y):
@@ -571,6 +588,14 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     
     tpe_place = {}
     tpe_grief = {}
+
+    points = {
+        'outlines': 0,
+        'operations_x2': 0,
+        'operations_x3': 0,
+        'no_grief_only_correct': 0,
+        'count_all': 0
+    }
 
     with open(user_log_file, newline='') as csvfile:
         reader = csv.reader(csvfile, delimiter='\t')
@@ -608,16 +633,40 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
                     is_correct = True
                 elif has_virgin:
                     is_virgin = True
-                    
+
+            cat = get_category(x, y)
+
             if is_correct or is_virgin: # since it passed the for loop, add as correct
                 tpe_place[coord] = tpe_place.get(coord, 0) + 1
                 tpe_grief.pop(coord, None)
+                if cat in points:
+                    points[cat] += 1
             elif present and not is_correct: # fails is_correct check, fails is_virgin check, but is present, thus it's a grief
-                tpe_grief[coord] = tpe_grief.get(coord, 0) + 1
-                tpe_place.pop(coord, None)
+                if cat == 'no_grief_only_correct':
+                    pass
+                else: 
+                    tpe_grief[coord] = tpe_grief.get(coord, 0) + 1
+                    tpe_place.pop(coord, None)
+                    if cat in points:
+                        points[cat] += 1
     tpe_pixels = sum(tpe_place.values())
     tpe_griefs = sum(tpe_grief.values())
-    return tpe_pixels - tpe_griefs, tpe_griefs # I return tpe_pixels - tpe_griefs, so I don't have to do that math everywhere else lol
+
+    points_mult = {
+        'outlines': 2,
+        'operations_x2': 2,
+        'operations_x3': 3,
+        'no_grief_only_correct': 1,
+        'count_all': 1
+    }
+
+    tpe_points = {}
+    for cat, count in points.items():
+        multiplier = points_mult.get(cat, 1)
+        mult_pixels = count * multiplier
+        tpe_points[cat] = mult_pixels // PIXELS_PER_POINT
+        
+    return tpe_pixels - tpe_griefs, tpe_griefs, tpe_points # I return tpe_pixels - tpe_griefs, so I don't have to do that math everywhere else lol
 
 
 async def tpe_pixels_count_user(user_id: int, callback=None) -> dict:
@@ -702,7 +751,7 @@ async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], di
     initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
     try:
         total_pixels, undo, mod = await pixel_counting(user_log_file)
-        tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path,
+        tpe_pixels, tpe_griefs, tpe_points = await tpe_pixels_count(user_log_file, temp_pattern, palette_path,
                                                         initial_canvas_path)
         key = result_key if result_key is not None else user_id # to make it work for both functions
         results[key] = {
@@ -710,6 +759,7 @@ async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], di
             'undo': undo,
             'tpe_pixels': tpe_pixels,
             'tpe_griefs': tpe_griefs,
+            'tpe_points': tpe_points
         }
     except Exception as e:
         print(f'An error occurred while processing canvas {canvas} for user {user_id}: {e}')
@@ -792,15 +842,17 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
 
             tpe_pixels = 0
             tpe_griefs = 0
+            tpe_points = 0
             if config.tpe(canvas):
                 tpe_start_time = time.time()
                 temp_pattern = os.path.join(ROOT_DIR, 'template', f'c{canvas}', '*.png')
                 initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
-                tpe_pixels, tpe_griefs = await tpe_pixels_count(user_log_file, temp_pattern, palette_path,
+                tpe_pixels, tpe_griefs, tpe_points = await tpe_pixels_count(user_log_file, temp_pattern, palette_path,
                                                                 initial_canvas_path)
                 tpe_end_time = time.time()
                 print(f'{tpe_pixels} pixels placed for TPE (took {tpe_end_time - tpe_start_time:.2f}s)')
                 print(f'{tpe_griefs} pixels griefed')
+                print(tpe_points)
 
             render_start_time = time.time()
             render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
@@ -822,13 +874,14 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
                 'replaced_other': replaced_other,  # pixels replaced by others
                 'tpe_pixels': tpe_pixels,  # for tpe - griefs
                 'tpe_griefs': tpe_griefs,  # just griefs. not always accurate
+                'tpe_points': tpe_points, # points
                 'filename': filename,
                 'output_path': output_path,
                 'user_log_file': user_log_file,
                 'mode': mode  # defaults to normal
             }
     except Exception as e:
-        print(f'Somethinmg went wrong when making a placemap: {e}')
+        print(f'Something went wrong when making a placemap: {e}')
         return False, {'error': f'Something went wrong!? The following was caught: {e}'}
 
 
