@@ -68,6 +68,7 @@ database.execute('''
         points INT,
         operation_id INT,
         phase INT,
+        correction INT,
         comment STR,
         FOREIGN KEY (operation_id) REFERENCES operations(operation_id)
         FOREIGN KEY (operation_id, phase) REFERENCES operation_phases(operation_id, phase)
@@ -79,6 +80,7 @@ database.execute('''
         operation_name STR,
         phase_amount INT,
         op_multiplier INT,
+        canvas STR,
         start_time DATETIME,
         end_time DATETIME
     )

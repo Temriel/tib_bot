@@ -65,6 +65,28 @@ class Stats(commands.Cog):
         except Exception as e:
             print(e)
 
+    async def fetch_info(self):
+        for attempt in range(4): # try once, if failed, try 3 more times
+            try:
+                handler = WebHandler()
+                return await asyncio.to_thread(handler.fetch_info)
+            except Exception as e:
+                if attempt == 3:
+                    print(f"Failed to fetch info: {e}")
+                    return None
+                await asyncio.sleep(3)
+
+    async def parse_info(self):
+        canvascode = None
+        try:
+            data = await self.fetch_info()
+            if data is None:
+                return None
+            canvascode = str(data.get("canvasCode", 0))
+            return canvascode
+        except Exception as e:
+            print(e)
+        print(canvascode)
 #    @tasks.loop(seconds=60)
 #    async def update_stats(self):
 #        now = datetime.now()
