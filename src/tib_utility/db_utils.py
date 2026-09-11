@@ -29,7 +29,7 @@ SRC_DIR = CUR_DIR.parents[1]
 ROOT_DIR = CUR_DIR.parents[2]
 DB_PATH = SRC_DIR / 'database.db'
 
-PIXELS_PER_POINT = 10 # 10 pixels for 1 point
+PIXELS_PER_POINT = config.pixels_per_point # default is 10
 
 database = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = database.cursor()

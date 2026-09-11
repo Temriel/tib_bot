@@ -103,7 +103,7 @@ class PlacemapDBCheckKeysFromUser(discord.ui.Modal, title='Input desired logkeys
                     os.unlink(user_log_file)
                 continue
             try:
-                correct_pixels, grief_pxiels = await db_utils.tpe_pixels_count(
+                correct_pixels, grief_pxiels, tpe_pixels = await db_utils.tpe_pixels_count(
                     user_log_file,
                     temp_pattern='',
                     palette_path=palette_path,

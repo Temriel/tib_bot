@@ -3,6 +3,7 @@ import os
 load_dotenv()
 default_palette = 13 # REMINDER to change this
 pxlslog_explorer_dir = os.getenv("PXLSLOG_EXPLORER_DIR")
+pixels_per_point = 10 # 10 pixels for 1 point
 
 def owner():
     """Defining an owner within Tib."""
