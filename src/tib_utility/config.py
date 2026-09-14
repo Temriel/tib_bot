@@ -33,6 +33,13 @@ def points_update_channel():
         raise ValueError("POINTS_UPDATE_CHANNEL_ID not set!")
     return int(points_update_channel_id)
 
+def operations_channel():
+    """Channel for Tib operations logging (operations, rankups, etc.)"""
+    operations_channel_id = os.getenv("OPERATIONS_CHANNEL_ID")
+    if operations_channel_id is None:
+        raise ValueError("OPERATIONS_CHANNEL_ID not set!")
+    return int(operations_channel_id)
+
 def admin_server():
     """Guild for admin commands."""
     admin_server_id = os.getenv("ADMIN_SERVER_ID")
