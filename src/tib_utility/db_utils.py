@@ -196,12 +196,12 @@ def get_stats(pxls_username: str) -> dict:
         total = 0
     if total < 0:
         rank = "griefer"
-    ranks = config.ranks()
+    ranks = config.pixel_ranks()
     for threshold, name in ranks:
         if total >= threshold:
             rank = name
             break
-    groups = config.rank_group()
+    groups = config.pixel_rank_groups()
     for threshold, name in groups:
         if total >= threshold:
             group = name

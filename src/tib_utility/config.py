@@ -19,6 +19,13 @@ def authorised():
         raise ValueError("AUTHORISED_ID not set!")
     return [int(id.strip()) for id in authorised_ids.split(',')]
 
+def authorised_role():
+    """Defining a role with more perms within Tib."""
+    authorised_role_id = os.getenv("AUTHORISED_ROLE_ID")
+    if authorised_role_id is None:
+        raise ValueError("AUTHORISED_ROLE_ID not set!")
+    return int(authorised_role_id)
+
 def update_channel():
     """Channel for Tib status updates (rankups, placemap stats, etc.)"""
     update_channel_id = os.getenv("UPDATE_CHANNEL_ID")
@@ -32,6 +39,13 @@ def points_update_channel():
     if points_update_channel_id is None:
         raise ValueError("POINTS_UPDATE_CHANNEL_ID not set!")
     return int(points_update_channel_id)
+
+def operations_conclusion_channel():
+    """Channel for Tib operations conclusion logging (operations, rankups, etc.)"""
+    operations_conclusion_channel_id = os.getenv("OPERATIONS_CONCLUSION_CHANNEL_ID")
+    if operations_conclusion_channel_id is None:
+        raise ValueError("OPERATIONS_CONCLUSION_CHANNEL_ID not set!")
+    return int(operations_conclusion_channel_id)
 
 def operations_channel():
     """Channel for Tib operations logging (operations, rankups, etc.)"""
@@ -130,7 +144,7 @@ def tpe(canvas: str):
     tpe_present = canvas.strip() in tpe_canvas()
     return tpe_present
 
-def ranks():
+def pixel_ranks():
     """A list of tuples for pixels required & associated rank."""
     return [
         (1000000, "Arch-Overseer"),
@@ -150,7 +164,7 @@ def ranks():
         (1000, "Private"),
     ]
 
-def rank_group():
+def pixel_rank_groups():
     """Grouping the above ranks."""
     return [
         (100000, "High Command"),
