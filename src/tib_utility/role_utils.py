@@ -25,12 +25,20 @@ class RoleUtility:
         remove_roles = [
             role for role in member.roles if role.id in cur_role_ids and (new_role is None or role.id != new_role.id)
         ]
-
-        if remove_roles:
-            await member.remove_roles(*remove_roles)
+        for role in remove_roles:
+            if not role.is_assignable:
+                continue
+            try:
+                await member.remove_roles(*remove_roles)
+            except discord.Forbidden:
+                continue
 
         if new_role is not None and new_role not in member.roles:
-            await member.add_roles(new_role)
+            if new_role.is_assignable():
+                try:
+                    await member.add_roles(new_role)
+                except discord.Forbidden:
+                    pass
 
     @staticmethod
     def get_total_points(username: str) -> int:
