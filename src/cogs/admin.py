@@ -10,7 +10,8 @@ import tib_utility.db_utils as db_utils
 from typing import Optional
 from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, \
     get_linked_pxls_username, tpe_pixels_count_canvas, placemap_description_format, CANVAS_REGEX, KEY_REGEX, resolve_name, \
-    points_comment_autocomplete
+    points_comment_autocomplete, get_linked_discord_username
+from tib_utility.role_utils import RoleUtility
 
 
 class NotOwner(app_commands.CheckFailure):
@@ -227,6 +228,20 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 return
             cursor.execute(query, (str(user), canvas, points, comment))
             database.commit()
+            if interaction.guild is not None:
+                discord_id = await get_linked_discord_username(user)
+                if discord_id is not None:
+                    member = interaction.guild.get_member(discord_id)
+                    if member is None:
+                        try: 
+                            member = await interaction.guild.fetch_member(discord_id)
+                        except discord.NotFound:
+                            member = None
+                    if member is not None:
+                        total_points = RoleUtility.get_total_points(user)
+                        await RoleUtility.sync_point_role(
+                            interaction.guild, member, total_points
+                        )
             update_channel_id = config.update_channel()
             update_channel = interaction.client.get_channel(update_channel_id)
             to_update = True

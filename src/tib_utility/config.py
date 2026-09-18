@@ -173,3 +173,49 @@ def pixel_rank_groups():
         (10000, "Lower Command"),
         (1000, "Enlisted"),
     ]
+
+def point_ranks():
+    return [
+        (100000, "Arch-Overseer"),
+        (75000, "Grand Overseer"),
+        (50000, "Overseer"),
+        (35000, "Arch-Admiral"),
+        (22500, "Grand Admiral"),
+        (15000, "Admiral"),
+        (10000, "General"),
+        (7500, "Colonel"),
+        (6000, "First Major"),
+        (5000, "Major"),
+        (4000, "First Sergeant Major"),
+        (3000, "Sergeant Major"),
+        (2500, "First Sergeant"),
+        (2000, "Master Sergeant"),
+        (1600, "Sergeant"),
+        (1300, "Major Corporal"),
+        (1000, "First Corporal"),
+        (750, "Master Corporal"),
+        (500, "Corporal"),
+        (100, "Private"),
+        (50, "Sailor"),
+    ]
+
+def point_rank_groups():
+    return [
+        (10000, "High Command"),
+        (5000, "Middle Command"),
+        (2500, "Sergeant Command"),
+        (1000, "Lower Command"),
+        (50, "Enlisted"),
+    ]
+
+def point_rank_roles():
+    roles = {}
+
+    for threshold, rank in point_ranks():
+        env_name = f"{threshold}_POINTS_ROLE"
+        role_id = os.getenv(env_name)
+
+        if role_id:
+            roles[threshold] = int(role_id)
+
+    return roles
