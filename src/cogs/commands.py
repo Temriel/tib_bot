@@ -1,9 +1,12 @@
+"""Incredibly simple yet useful commands for Tib. \
+    Were the first things written for the bot"""
+
+from typing import Optional
 import discord
 from discord import app_commands
 from discord.ext import commands
-from typing import Optional
 from tib_utility.db_utils import cursor, database, CANVAS_REGEX
-import tib_utility.config as config
+from tib_utility import config
 
 owner_id = config.owner()
 
@@ -12,6 +15,7 @@ COG_CATEGORIES = {
     'placemap': 'Placemap Commands',
     'commander': 'General Commands',
 }
+
 
 def bot_commands(existing_commands, parent_name=''):
     """Find all bot commands for /help"""
@@ -24,6 +28,7 @@ def bot_commands(existing_commands, parent_name=''):
             description = command.description or 'No description provided.'
             command_list.append((f'/{full_name}', description))
     return command_list
+
 
 class Commander(commands.Cog):
     def __init__(self, client):

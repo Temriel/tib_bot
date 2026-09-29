@@ -8,6 +8,8 @@
 *.txt
 .idea
 points_db.py
+points_utils.py
+.pylintrc
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

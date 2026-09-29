@@ -1,14 +1,14 @@
+"""This module starts the whole bot, provided you have everything."""
+
 import asyncio
+import os
+import importlib
+import logging
+from dotenv import load_dotenv
 import discord
 from discord.ext import commands
-import os
-from dotenv import load_dotenv
-import logging
-from cogs.admin import NotOwner
-from cogs.points_db import NotAuth
-import tib_utility.config as config
-import tib_utility.db_utils as db_utils
-import importlib
+from tib_utility import config
+from tib_utility import db_utils
 
 load_dotenv()
 
@@ -21,12 +21,14 @@ owner_id = config.owner()
 
 @bot.event
 async def on_ready():
+    """Prints to the console that hey, we're live!"""
     print(f'Started. Logged in as {bot.user}.')
     status = discord.CustomActivity(name="Watching over Pxls logs | /help")
     await bot.change_presence(activity=status)
     asyncio.create_task(db_utils.preload_canvas_cache())
 
 async def load():
+    """Loads all cogs (commands)."""
     for filename in os.listdir('./cogs'):
         if filename.endswith('.py'):
             try:
@@ -37,17 +39,21 @@ async def load():
 
 bot_close = bot.close
 async def cleanup():
+    """Forces the bot to close all DB connections."""
     db_utils.db_shutdown() # make sure files are synced properly
     await bot_close()
 bot.close = cleanup
 
-                
+
 # all commands in this file are just for making sure the bot Actually Works
 @tree.command(name='shutdown', description='Shut down the bot (ADMIN ONLY)')
 async def shutdown(interaction: discord.Interaction):
     """Goodnight, sweet prince."""
     if interaction.user.id != owner_id:
-        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+        await interaction.response.send_message(
+            "You do not have permission to use this command :3",
+            ephemeral=True
+            )
         return
     await interaction.response.send_message("Shutting down...")
     await bot.close()
@@ -56,7 +62,10 @@ async def shutdown(interaction: discord.Interaction):
 async def sync(interaction: discord.Interaction):
     """Sync commands to Discord (DO NOT SPAM)"""
     if interaction.user.id != owner_id:
-        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+        await interaction.response.send_message(
+            "You do not have permission to use this command :3",
+            ephemeral=True
+            )
         return
     fmt = await tree.sync()
     await interaction.response.send_message('Synced commands.', ephemeral=True)
@@ -67,7 +76,10 @@ async def sync_admin(interaction: discord.Interaction):
     """Sync admin commands to the admin server only."""
     fmt = []
     if interaction.user.id != owner_id:
-        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+        await interaction.response.send_message(
+            "You do not have permission to use this command :3",
+            ephemeral=True
+            )
         return
     guild_list = [config.admin_server(), config.dev_server()]
     for guild_id in guild_list:
@@ -78,9 +90,13 @@ async def sync_admin(interaction: discord.Interaction):
 
 @tree.command(name='reload-cogs', description='Reload the cogs (ADMIN ONLY)')
 async def reload_cogs(interaction: discord.Interaction):
-    """Reload all cogs present within the bot. They can't be used otherwise (esp if you add new code)"""
+    """Reload all cogs present within the bot. 
+    They can't be used otherwise (esp if you add new code)"""
     if interaction.user.id != owner_id:
-        await interaction.response.send_message("You do not have permission to use this command :3", ephemeral=True)
+        await interaction.response.send_message(
+            "You do not have permission to use this command :3",
+            ephemeral=True
+            )
         return
     reload = []
     importlib.reload(config)
@@ -106,11 +122,13 @@ async def reload_cogs(interaction: discord.Interaction):
         )
     embed.set_author(
         name=interaction.user.global_name or interaction.user.name, 
-        icon_url=interaction.user.avatar.url if interaction.user.avatar else interaction.user.default_avatar.url
+        icon_url=interaction.user.avatar.url if \
+            interaction.user.avatar else interaction.user.default_avatar.url
         )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 async def main():
+    """mow"""
     await load()
 
 asyncio.run(main())

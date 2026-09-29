@@ -1,18 +1,23 @@
-import discord
-from discord import app_commands
-from discord.ext import commands
-import sqlite3
-# import subprocess # for error handling
-import time
-from typing import Optional
-# from collections import defaultdict # used previously, cannot remember if this was for error handling or not
-import tib_utility.config as config
-import tib_utility.db_utils as db_utils
-from tib_utility.db_utils import cursor, database, generate_placemap, get_linked_pxls_username, placemap_description_format, filter, CANVAS_REGEX, KEY_REGEX, ROOT_DIR, pixel_counting
+"""Handles all logic for adding logkeys, generating placemaps (using Etos2's log explorer), etc."""
+
 import tempfile
 import os
 import shutil
 from pathlib import Path
+import sqlite3
+# import subprocess # for error handling
+import time
+from typing import Optional
+# from collections import defaultdict 
+# # used previously, cannot remember if this was for error handling or not
+import discord
+from discord import app_commands
+from discord.ext import commands
+from tib_utility import config
+from tib_utility import db_utils
+from tib_utility.db_utils import cursor, database, generate_placemap, get_linked_pxls_username, \
+    placemap_description_format, filter, CANVAS_REGEX, KEY_REGEX, pixel_counting
+
 
 owner_id = config.owner()
 
@@ -57,6 +62,7 @@ class PlacemapDBAdd(discord.ui.Modal, title='Add your log key.'):
 
 
 class PlacemapDBCheckKeysFromUser(discord.ui.Modal, title='Input desired logkeys here.'):
+    """Modal handling logkey addition for multiple users."""
     # this is gonna be used for adding the keys ONLY, similar to the above (but moreso the admin version)
     def __init__(self, canvas: str, template_paths: list[str], temp_dir: str):
         super().__init__()
@@ -166,7 +172,10 @@ async def open_add_modal(interaction: discord.Interaction):
     await interaction.response.send_modal(modal)
     
     
-async def open_check_modal(interaction: discord.Interaction, canvas: str, template_paths: list[str], temp_dir: str):
+async def open_check_modal(
+        interaction: discord.Interaction,
+        canvas: str, template_paths: list[str],
+        temp_dir: str):
     """Open the modal to check log keys against user-provided templates.
 
     Args:
@@ -184,17 +193,29 @@ async def open_check_modal(interaction: discord.Interaction, canvas: str, templa
 
 
 class Placemap(commands.Cog):
+    """All placemap related Discord commands."""
     def __init__(self, client):
         self.client = client
 
     @commands.Cog.listener()
     async def on_ready(self):
+        """Notifies in the console that the cog has been loaded correctly.
+        """
         print('Key DB cog loaded')
 
-    group = app_commands.Group(name="logkey", description="Add your log key or make a placemap from it :3")
+    group = app_commands.Group(
+        name="logkey",
+        description="Add your log key or make a placemap from it :3"
+        )
 
-    @group.command(name='add', description='Add a log key.') # adds a log key to the database using a fancy ass modal
-    async def placemap_db_add(self, interaction: discord.Interaction):
+    @group.command(
+        name='add',
+        description='Add a log key.'
+        ) # adds a log key to the database using a fancy ass modal
+    async def placemap_db_add(
+        self,
+        interaction: discord.Interaction
+        ):
         """Command to add a log key to the database. Opens a modal
 
         Args:
@@ -216,9 +237,19 @@ class Placemap(commands.Cog):
         view.add_item(button)
         await interaction.response.send_message(embed=embed, view=view)
 
-    @group.command(name='generate', description='Generate a placemap from a log key.')
-    @app_commands.describe(canvas='What canvas to generate the placemap for.', nofilter='Skip filtering (only for repeat pladcemaps)')
-    async def placemap_db_generate(self, interaction: discord.Interaction, canvas: str, nofilter: Optional[bool] = False):
+    @group.command(
+            name='generate',
+            description='Generate a placemap from a log key.')
+    @app_commands.describe(
+        canvas='What canvas to generate the placemap for.',
+        nofilter='Skip filtering (only for repeat pladcemaps)'
+        )
+    async def placemap_db_generate(
+        self,
+        interaction:discord.Interaction,
+        canvas: str,
+        nofilter: Optional[bool] = False
+        ):
         """Generate a placemap by piping the necessary arguments to pxlslog-explorer.
 
         Args:
@@ -230,8 +261,6 @@ class Placemap(commands.Cog):
         update_channel_id = config.update_channel()
         update_channel = interaction.client.get_channel(update_channel_id)
         start_time = time.time()
-        if nofilter is not None:
-            nofilter = nofilter
         await interaction.response.defer(ephemeral=False,thinking=True)
         state, results = await generate_placemap(user, canvas, nofilter)
 
@@ -245,7 +274,8 @@ class Placemap(commands.Cog):
         if not pxls_username:
             pxls_username = user.global_name or user.name
 
-        if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread): # only try if there's one set
+        if isinstance(update_channel, discord.TextChannel) or \
+            isinstance(update_channel, discord.Thread): # only try if there's one set
             embed = discord.Embed(
             title=f'{pxls_username} on c{canvas}', 
             description=f'**User ID:** {user.id}\n{constructed_desc}',
@@ -257,7 +287,7 @@ class Placemap(commands.Cog):
                 )
             await update_channel.send(embed=embed)
 
-        try: 
+        try:
             end_time = time.time()
             elapsed_time = end_time - start_time
             print(f'/logkey generate took {elapsed_time:.2f}s')
@@ -277,7 +307,10 @@ class Placemap(commands.Cog):
             view = db_utils.PlacemapAltView(user, canvas, mode, user_log_file)
             await interaction.followup.send(embed=embed, file=file, view=view)
         except Exception as e:
-            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            await interaction.response.send_message(
+                'Error! Something went wrong, check the console.',
+                ephemeral=True
+                )
             print(f'An error occurred: {e}')
             return
     
@@ -294,7 +327,10 @@ class Placemap(commands.Cog):
             cursor.execute(query, (user.id,))
             results = cursor.fetchall()
             if not results:
-                await interaction.response.send_message('No log keys found for your user!', ephemeral=True)
+                await interaction.response.send_message(
+                    'No log keys found for your user!',
+                    ephemeral=True
+                    )
                 return
             canvases = [str(row[0]) for row in results]
             cols = 4

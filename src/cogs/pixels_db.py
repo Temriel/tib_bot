@@ -1,14 +1,15 @@
-import discord
-from discord import app_commands, Interaction
-from discord.ext import commands
-import os
-from PIL import Image, ImageDraw, ImageFont
+from typing import Optional
 import time
 import io
 import asyncio
+import os
+import discord
+from discord import app_commands, Interaction
+from discord.ext import commands
+from PIL import Image, ImageDraw, ImageFont
 from tib_utility import config
-from tib_utility.db_utils import cursor, get_linked_pxls_username, get_linked_discord_username, get_stats, CANVAS_REGEX, USERNAME_REGEX, create_graph
-from typing import Optional
+from tib_utility.db_utils import cursor, get_linked_pxls_username, \
+get_linked_discord_username, get_stats, CANVAS_REGEX, USERNAME_REGEX, create_graph
 
 def create_pages(items: list, page: int, page_size: int = 30):
     """Function to determine the amount of pages & what goes where."""
@@ -18,7 +19,9 @@ def create_pages(items: list, page: int, page_size: int = 30):
     return items[start:start + page_size], total_pages
 
 class LeaderboardView(discord.ui.View):
-    def __init__(self, all_pixels: list, font_path: str, font_size: int, page_size: int = 30, timeout: Optional[float] = 60, canvas: Optional[str] = None):
+    def __init__(self, all_pixels: list, font_path: str, font_size: int,
+                 page_size: int = 30, timeout: Optional[float] = 60,
+                 canvas: Optional[str] = None):
         super().__init__(timeout=timeout)
         self.all_pixels = all_pixels
         self.font_path = font_path
@@ -28,7 +31,7 @@ class LeaderboardView(discord.ui.View):
         self.current_page = 1
         self.total_pages = (len(all_pixels) + page_size - 1) // page_size
         self.spacing = 18
-    
+
     def generate_embed(self):
         """Generate an embed for /list, applies to pages too."""
         # fuck this god damn function i hate you. i hate you. I hate you.
@@ -41,8 +44,8 @@ class LeaderboardView(discord.ui.View):
 
         bg_color = (24, 4, 53)
         header_color = (75, 0, 130)
-        even_row_color = (34, 11, 76)
-        odd_row_color = (29, 8, 65)
+        odd_row_color = (34, 11, 76)
+        even_row_color = (29, 8, 65)
         border_color = (138, 43, 226)
         text_color = (255, 255, 255)
 
@@ -114,7 +117,7 @@ class LeaderboardView(discord.ui.View):
         with io.BytesIO() as image_binary: # below sends the embed w/ the image
             image.save(image_binary, 'PNG')
             image_binary.seek(0)
-            
+
             if self.canvas:
                 file = discord.File(fp=image_binary, filename=f'c{self.canvas}_leaderboard.png')
                 embed.set_image(url=f"attachment://c{self.canvas}_leaderboard.png")
@@ -123,7 +126,7 @@ class LeaderboardView(discord.ui.View):
                 file = discord.File(fp=image_binary, filename='alltime_leaderboard.png')
                 embed.set_image(url="attachment://alltime_leaderboard.png")
                 embed.title = "TPE all-time Leaderboard"
-                
+
         embed.description = f"Total pixels recorded: **{sum(total for _, total in self.all_pixels)}**\n"
         embed.description += f"Total users recorded: **{len(self.all_pixels)}**"
         return embed, file
@@ -142,7 +145,7 @@ class LeaderboardView(discord.ui.View):
         start_time = time.time()
         if self.current_page > 1:
             self.current_page -= 1
-        else: 
+        else:
             self.current_page = self.total_pages
         await self.pages_embed(interaction, start_time)
 
@@ -152,7 +155,7 @@ class LeaderboardView(discord.ui.View):
         start_time = time.time()
         if self.current_page < self.total_pages:
             self.current_page += 1
-        else: 
+        else:
             self.current_page = 1
         await self.pages_embed(interaction, start_time)
 
@@ -163,6 +166,8 @@ class Database(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
+        """Notifies in the console that the cog has been loaded correctly.
+        """
         print('Pixels cog loaded.')
 
     @app_commands.command(name='lookup', description='See how many pixels a certain user has placed for us.')
@@ -178,7 +183,7 @@ class Database(commands.Cog):
             linked_discord = await get_linked_discord_username(internal_pxls_username)
             if not linked_discord:
                 internal_discord_user = None
-            else: 
+            else:
                 internal_discord_user = await interaction.client.fetch_user(linked_discord)
         # only discord user, errors if no pxls username
         elif discorduser:
@@ -192,7 +197,7 @@ class Database(commands.Cog):
             internal_discord_user = interaction.user
             internal_pxls_username = await get_linked_pxls_username(internal_discord_user.id)
             if not internal_pxls_username:
-                await interaction.response.send_message(f'You do not have a linked Pxls username (yet).', ephemeral=True)
+                await interaction.response.send_message('You do not have a linked Pxls username (yet).', ephemeral=True)
                 return
         stats = get_stats(internal_pxls_username)
         total = stats['total']
@@ -214,7 +219,7 @@ class Database(commands.Cog):
                 return
             get_users_canvas = "SELECT user, SUM(pixels) as total_all FROM pixels WHERE canvas=? GROUP BY user ORDER BY total_all DESC"
             cursor.execute(get_users_canvas, (canvas,)) # does the above
-        else: 
+        else:
             get_users_all = "SELECT user, SUM(pixels) as total_all FROM pixels GROUP BY user ORDER BY total_all DESC"
             cursor.execute(get_users_all) # does the above
         all_pixels = cursor.fetchall() # defines all_pixels to be the thing we got from the database
@@ -235,7 +240,7 @@ class Database(commands.Cog):
         elapsed_time = end_time - start_time
         fuck_you_file.set_footer(text=f'Generated in {elapsed_time:.2f}s\nPage {view.current_page}/{view.total_pages}')
         await interaction.response.send_message(embed=fuck_you_file, file=file, view=view)
-    
+
     group = app_commands.Group(name="graph", description="View stats through GRAPHS:tm:")
 
     @group.command(name='user', description='View how much a user has placed for TPE over time.')
@@ -267,7 +272,7 @@ class Database(commands.Cog):
             internal_discord_user = interaction.user
             internal_pxls_username = await get_linked_pxls_username(internal_discord_user.id)
             if not internal_pxls_username:
-                await interaction.followup.send(f'You do not have a linked Pxls username (yet).', ephemeral=True)
+                await interaction.followup.send('You do not have a linked Pxls username (yet).', ephemeral=True)
                 return
         # handles the Graphering
         try:
@@ -286,14 +291,14 @@ class Database(commands.Cog):
                     if first is None:
                         first = i
                     last = i
-                    
+
             if first is None or last is None:
                 await interaction.followup.send(f'Something went wrong when organising the data for {internal_pxls_username}. Please ping Temriel.', ephemeral=True)
                 return
             for c in config.tpe_canvas()[first:last+1]:
                 canvases.append(f"c{c}")
                 pixels.append(data[c] if c in data else 0)
-            
+
             stats = get_stats(internal_pxls_username)
             rank = stats['rank']
             group = stats['group']
@@ -320,7 +325,7 @@ class Database(commands.Cog):
         except Exception as e:
             await interaction.followup.send("An error occurred.", ephemeral=True)
             print(f"An error occurred: {e}")
-    
+
     @group.command(name='all', description='View how much has been placed for TPE over time.')
     async def pixels_db_graph_all(self, interaction: discord.Interaction):
         """Graph total TPE pixels per canvas."""
@@ -334,7 +339,7 @@ class Database(commands.Cog):
             if not data:
                 await interaction.followup.send('No data found.', ephemeral=True)
                 return
-            
+
             data = {str(row[0]): row[1] for row in data}
             canvases = []
             pixels = []
@@ -352,12 +357,16 @@ class Database(commands.Cog):
             for c in config.tpe_canvas()[first:last+1]:
                 canvases.append(f"c{c}")
                 pixels.append(data[c] if c in data else 0)
-                
+
             image_buffer = await asyncio.to_thread(create_graph, canvases, pixels)
             file = discord.File(image_buffer, filename='tpe_all_graphed_over_time.png')
             embed = discord.Embed(
                 title="TPE Global Stats",
-                description=f"Total pixels recorded: **{sum(pixels)}**\nTotal users recorded: **{active_users}**\nTotal canvases recorded: **{len(canvases)}**",
+                description=(
+                    f"Total pixels recorded: **{sum(pixels)}**\n"
+                    f"Total users recorded: **{active_users}**\n"
+                    f"Total canvases recorded: **{len(canvases)}**"
+                ),
                 color=discord.Color.purple()
                 )
             embed.set_image(url=f'attachment://{file.filename}')
@@ -365,10 +374,11 @@ class Database(commands.Cog):
             elapsed_time = end_time - start_time
             embed.set_footer(text=f'Generated in {elapsed_time:.2f}s')
             await interaction.followup.send(embed=embed, file=file)
-            
+
         except Exception as e: # if something other than a lack of data happens
             await interaction.followup.send("An error occurred.", ephemeral=True)
             print(f"An error occurred: {e}")
 
 async def setup(client):
+    """Initialise the cog on startup (or reload)"""
     await client.add_cog(Database(client))

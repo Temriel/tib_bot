@@ -1,17 +1,18 @@
+"""Experimental GUI interaction with Tib."""
+
 import asyncio
 import os
 import sys
 import sqlite3
+import tkinter
+from tkinter import messagebox, ttk
+from tib_utility.db_utils import cursor, database, get_all_users,\
+    get_linked_discord_username, get_linked_pxls_username, CANVAS_REGEX, KEY_REGEX
 
 
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.dirname(CUR_DIR)
 sys.path.append(SRC_DIR)
-
-
-from tib_utility.db_utils import cursor, database, get_all_users, get_linked_discord_username, get_linked_pxls_username, CANVAS_REGEX, KEY_REGEX
-import tkinter
-from tkinter import messagebox, ttk
 
 
 async def find_data():

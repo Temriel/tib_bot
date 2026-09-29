@@ -1,6 +1,8 @@
+"""This module handles all data parsing of pxls.space data."""
+
 import asyncio
-from discord.ext import commands, tasks
 from datetime import datetime, timedelta
+from discord.ext import commands # tasks
 from tib_utility.webhandler import WebHandler
 
 
@@ -8,6 +10,7 @@ TARGET_MINUTES = (1, 16, 31, 46) # pxls takes a hot sec to compile stats
 
 
 class Stats(commands.Cog):
+    """Class handling all interactions with pxls.space"""
     def __init__(self, bot):
         self.bot = bot
         self._cached_stats = None
@@ -21,12 +24,19 @@ class Stats(commands.Cog):
         return (now + timedelta(hours=1)).replace(minute=TARGET_MINUTES[0], second=0, microsecond=0)
 
     async def get_stats(self):
+        """Function that decides wether to use cached data or 
+        if new data should be parsed"""
         now = datetime.now()
         if self._cached_stats is not None and now < self._cache_until:
             return self._cached_stats
         return await self.fetch_stats()
-    
+
     async def fetch_stats(self):
+        """Function fetching data on pxls.space/stats/stats.json
+
+        Returns:
+            list: All fetched data.
+        """
         for attempt in range(4): # try once, if failed, try 3 more times
             try:
                 handler = WebHandler()
@@ -41,6 +51,18 @@ class Stats(commands.Cog):
                 await asyncio.sleep(3)
 
     async def parse_stats(self, username, data=None):
+        """Function parsing data found on pxls.space/stats/stats.json
+
+        Args:
+            username (str, list, or tuple): The username(s) to look for.
+            data (_type_, optional): _description_. Defaults to None.
+
+        Raises:
+            ValueError: If the used username is not in the list.
+
+        Returns:
+            dict: A dict tying usernames to canvas pixels.
+        """
         try:
             if data is None:
                 data = await self.get_stats()
@@ -66,6 +88,7 @@ class Stats(commands.Cog):
             print(e)
 
     async def fetch_info(self):
+        """Fetches pxls.space/info"""
         for attempt in range(4): # try once, if failed, try 3 more times
             try:
                 handler = WebHandler()
@@ -77,6 +100,11 @@ class Stats(commands.Cog):
                 await asyncio.sleep(3)
 
     async def parse_info(self):
+        """Function that parses /info for the canvasCode
+
+        Returns:
+            int: canvas code
+        """
         canvascode = None
         try:
             data = await self.fetch_info()

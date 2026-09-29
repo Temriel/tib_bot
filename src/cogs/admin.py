@@ -1,25 +1,29 @@
-import discord
-from discord import app_commands
-from discord.ext import commands
-import tib_utility.config as config
+"""This cog handles all Admin commands."""
+
 import sqlite3
 import time
 import re
 import asyncio
-import tib_utility.db_utils as db_utils
 from typing import Optional
-from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, tpe_pixels_count_user, \
-    get_linked_pxls_username, tpe_pixels_count_canvas, placemap_description_format, CANVAS_REGEX, KEY_REGEX, resolve_name, \
+import discord
+from discord import app_commands
+from discord.ext import commands
+from tib_utility import config
+from tib_utility import db_utils
+from tib_utility.db_utils import cursor, database, get_stats, generate_placemap, \
+    tpe_pixels_count_user, get_linked_pxls_username, tpe_pixels_count_canvas, \
+    placemap_description_format, CANVAS_REGEX, KEY_REGEX, resolve_name, \
     points_comment_autocomplete, get_linked_discord_username
 from tib_utility.role_utils import RoleUtility
 
 
 class NotOwner(app_commands.CheckFailure):
     """Custom exception for when a user is not the owner of the bot."""
-    pass 
+    pass
 
 
 def owner_only():
+    """Makes sure only the owner can run these commands."""
     async def is_owner_check(interaction: discord.Interaction) -> bool:
         if interaction.user.id != config.owner():
             await interaction.response.send_message(
@@ -32,12 +36,27 @@ def owner_only():
 
 
 class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
+    """Modals require a class, this one handles adding keys to the database.
+
+    Args:
+        discord (_type_): I mean it's a Discord thing.
+        title (str, optional): _description_. Defaults to 'Force add a logkey'.
+    """
     # noinspection PyTypeChecker
-    user_canvas = discord.ui.TextInput(label='userID/name, canvas', placeholder='uID,28,30a,59 OR 56a,uID1,uID2,uID3', style=discord.TextStyle.short, max_length=200)
+    user_canvas = discord.ui.TextInput(label='userID/name, canvas',
+                                       placeholder='uID,28,30a,59 OR 56a,uID1,uID2,uID3',
+                                       style=discord.TextStyle.short, max_length=200)
     # noinspection PyTypeChecker
-    key = discord.ui.TextInput(label='Log keys (512 char each)', placeholder='key1,key2,key3,key4,key5,key6', style=discord.TextStyle.paragraph, max_length=4000)
+    key = discord.ui.TextInput(label='Log keys (512 char each)',
+                               placeholder='key1,key2,key3,key4,key5,key6',
+                               style=discord.TextStyle.paragraph, max_length=4000)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        """Handles key adding to the database. 
+
+        Args:
+            interaction (discord.Interaction): The user doing it (usually only the owner)
+        """
         query_logkey = "INSERT OR REPLACE INTO logkey VALUES (?, ?, ?)"
         query_user = "INSERT OR IGNORE INTO users (user_id) VALUES (?)"
         try:
@@ -81,12 +100,15 @@ class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                 if fail:
                     message += f'\nFailed for canvases: {', '.join(fail)}'
                 await interaction.response.send_message(message, ephemeral=True)
-                
+
             else: # one canvas, multiple users
                 canvas = user_canvases[0]
                 user_inputs = user_canvases[1:]
                 if len(keys) != len(user_inputs):
-                    await interaction.response.send_message('The number of keys must match the number of canvases.', ephemeral=True)
+                    await interaction.response.send_message(
+                        'The number of keys must match the number of canvases.', 
+                        ephemeral=True
+                        )
                     return
                 success = []
                 fail = []
@@ -112,11 +134,19 @@ class PlacemapDBAddAdmin(discord.ui.Modal, title='Force add a logkey'):
                     message += f'\nFailed for users: {', '.join(fail)}'
                 await interaction.response.send_message(message, ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            await interaction.response.send_message(
+                'Error! Something went wrong, check the console.', 
+                ephemeral=True
+                )
             print(f'An error occurred: {e}')
 
 
 class Admin(commands.Cog): # this is for the actual Discord commands part
+    """All Admin commands.
+
+    Args:
+        commands (_type_): _description_
+    """
     def __init__(self, client):
         self.client = client
         self.owner_id = config.owner()
@@ -125,27 +155,45 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
 
     @commands.Cog.listener()
     async def on_ready(self):
+        """Notifies in the console that the cog has been loaded correctly.
+        """
         print('Admin cog loaded.')
 
     group = app_commands.Group(name="admin", description="Admin only commands :3")
 
-    @group.command(name='link', description='Link a Pxls username with a Discord user (ADMIN ONLY).')
+    @group.command(name='link', 
+                   description='Link a Pxls username with a Discord user (ADMIN ONLY).')
     @owner_only()
-    @app_commands.describe(userid='The Discord user to link to.', username='The Pxls username to link.')
-    async def pixels_db_link(self, interaction: discord.Interaction, userid: discord.User, username: str):
+    @app_commands.describe(
+        userid='The Discord user to link to.',
+        username='The Pxls username to link.')
+    async def pixels_db_link(
+        self,
+        interaction: discord.Interaction,
+        userid: discord.User,
+        username: str):
         """Link a Pxls username to a Discord user."""
         query = "INSERT INTO users (user_id, username) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET username = ?"
         try:
             cursor.execute(query, (userid.id, username, username))
             database.commit()
-            await interaction.response.send_message(f'Successfully linked **{username}** to **{userid}**!')
+            await interaction.response.send_message(
+                f'Successfully linked **{username}** to **{userid}**!'
+                )
         except sqlite3.IntegrityError:
-            await interaction.response.send_message(f'Error! The username **{username}** is already linked to another user.', ephemeral=True)
+            await interaction.response.send_message(
+                f'Error! The username **{username}** is already linked to another user.',
+                ephemeral=True
+                )
         except Exception as e:
-            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            await interaction.response.send_message(
+                'Error! Something went wrong, check the console.',
+                ephemeral=True
+                )
             print(f'An error occurred: {e}')
 
-    @group.command(name='unlink', description='Unlink a Pxls username from a Discord user (ADMIN ONLY).')
+    @group.command(name='unlink', 
+                   description='Unlink a Pxls username from a Discord user (ADMIN ONLY).')
     @owner_only()
     @app_commands.describe(username='The Pxls username to unlink.')
     async def pixels_db_unlink(self, interaction: discord.Interaction, username: str):
@@ -233,7 +281,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 if discord_id is not None:
                     member = interaction.guild.get_member(discord_id)
                     if member is None:
-                        try: 
+                        try:
                             member = await interaction.guild.fetch_member(discord_id)
                         except discord.NotFound:
                             member = None
@@ -253,14 +301,17 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             if current_channel == update_channel: # to avoid repeat messages in update_channel
                 to_update = False
             if isinstance(update_channel, (discord.TextChannel, discord.Thread)):
-                if to_update: 
+                if to_update:
                     await update_channel.send(message)
             print(message)
         except Exception as e:
             await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
 
-    @group.command(name='notify-users', description='Notify all users who signed up for notifications about a new canvas (ADMIN ONLY).')
+    @group.command(
+            name='notify-users',
+            description='Notify all users who signed up for notifications about a new canvas (ADMIN ONLY).'
+            )
     @owner_only()
     @app_commands.describe(canvas='(OPTIONAL) The canvas to specify.')
     async def notifications_admin(self, interaction: discord.Interaction, canvas: str):
@@ -315,8 +366,6 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
         update_channel = interaction.client.get_channel(update_channel_id)
         start_time = time.time()
         await interaction.response.defer(ephemeral=False,thinking=True)
-        if nofilter is not None:
-            nofilter = nofilter
         state, results = await generate_placemap(user, canvas, nofilter)
 
         if state:
@@ -329,8 +378,8 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
         pxls_username = await get_linked_pxls_username(user.id)
         if not pxls_username:
             pxls_username = user.global_name or user.name
-            
-        if isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
+
+        if isinstance(update_channel, (discord.TextChannel, discord.Thread)):
             embed = discord.Embed(
             title=f'{pxls_username} on c{canvas}', 
             description=f'**User ID:** {user.id}\n{constructed_desc}',
@@ -342,7 +391,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 )
             await update_channel.send(embed=embed)
 
-        try: 
+        try:
             end_time = time.time()
             elapsed_time = end_time - start_time
             print(f'/admin force-generate took {elapsed_time:.2f}s')
@@ -362,11 +411,17 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             view = db_utils.PlacemapAltView(user, canvas, mode, user_log_file)
             await interaction.followup.send(embed=embed, file=file, view=view)
         except Exception as e:
-            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            await interaction.response.send_message(
+                'Error! Something went wrong, check the console.',
+                ephemeral=True
+                )
             print(f'An error occurred: {e}')
             return
-    
-    @group.command(name='force-check-user', description='Forcefully check how many pixels a user has placed on all recorded canvases (ADMIN ONLY).')
+
+    @group.command(
+            name='force-check-user', 
+            description='Forcefully check how many pixels a user has placed on all recorded canvases (ADMIN ONLY).'
+            )
     @owner_only()
     @app_commands.describe(user='The user to check (user ID works too).')
     async def placemap_db_force_check_user(self, interaction: discord.Interaction, user: discord.User):
@@ -384,7 +439,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             if not results:
                 await progress.edit(content=f'No logs found for <@{user.id}>')
                 return
-            
+
             cleaned_results = sorted(results.keys(), key=lambda c: (int(re.sub(r'\D', '', c)), re.sub(r'\d', '', c)))
             header = f'<@{user.id}> ({user.id})'
             header2 = f"{'Canvas':<6} | {'Placed':>7} | {'For TPE':>7} | {'Griefed':>7}"
@@ -393,7 +448,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             tpe_total = sum(stats.get('tpe_pixels', 0) for stats in results.values())
             grief_total = sum(stats.get('tpe_griefs', 0) for stats in results.values())
             lines = []
-            
+
             for canvas in cleaned_results:
                 stats = results.get(canvas, {})
                 total_pixels = stats.get('total_pixels', 0)
@@ -401,7 +456,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                 tpe_griefs = stats.get('tpe_griefs', 0)
                 line = f"{'c'+canvas:<6} | {total_pixels:>7} | {tpe_pixels:>7} | {tpe_griefs:>7}"
                 lines.append(line)
-            
+
             force_check_end = time.time()
             force_elapsed_time = force_check_end - force_check_start
             summary = f"{'-'*6}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}\n{'Total':<6} | {pixels_total:>7} | {tpe_total:>7} | {grief_total:>7}"
@@ -409,7 +464,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             current_chunk = f'{header}\n```{header2}\n{header_seperator}'
             for line in lines:
                 if len(current_chunk) + len(line) + 50 > 4000:
-                    current_chunk = f'\n```' # THIS IS A BACKTICK
+                    current_chunk = '\n```' # THIS IS A BACKTICK
                     chunks.append(current_chunk)
                     current_chunk = f'{header2}\n{header_seperator}\n' + line
                 else:
@@ -439,11 +494,17 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                             )
                         await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
-            await interaction.followup.send('Error! Something went wrong, check the console.', ephemeral=True)
+            await interaction.followup.send(
+                'Error! Something went wrong, check the console.',
+                ephemeral=True
+                )
             print(f'An error occurred: {e}')
             return
 
-    @group.command(name='force-check-canvas', description='Forcefully check how many pixels all users have placed on a specific canvas (ADMIN ONLY).')
+    @group.command(
+            name='force-check-canvas',
+            description='Forcefully check how many pixels all users have placed on a specific canvas (ADMIN ONLY).'
+            )
     @owner_only()
     @app_commands.describe(canvas='What canvas to check (no c).')
     async def placemap_db_force_check_canvas(self, interaction: discord.Interaction, canvas: str):
@@ -490,7 +551,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             current_chunk = f'```{header2}\n{header_seperator}'
             for line in lines:
                 if len(current_chunk) + len(line) + 50 > 4000:
-                    current_chunk = f'\n```' # THIS IS A BACKTICK
+                    current_chunk = '\n```' # THIS IS A BACKTICK
                     chunks.append(current_chunk)
                     current_chunk = f'{header2}\n{header_seperator}\n' + line
                 else:

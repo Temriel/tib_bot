@@ -1,5 +1,5 @@
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
 load_dotenv()
 default_palette = 13 # REMINDER to change this
 pxlslog_explorer_dir = os.getenv("PXLSLOG_EXPLORER_DIR")
@@ -69,7 +69,8 @@ def dev_server():
     return int(dev_server_id)
 
 def get_palette(canvas: str):
-    """A simple function to find the palette of a canvas. If it isn't found, apply a default palette."""
+    """A simple function to find the palette of a canvas. 
+    If it isn't found, apply a default palette."""
     match canvas:
         case "1"|"2":
             return 1
@@ -125,6 +126,11 @@ def palette_initial_paths(canvas: str):
     return palette_path, initial_canvas_path
 
 def tpe_canvas():
+    """Gets the list of all canvases regarded as 'TPE'
+
+    Returns:
+        list: list of all TPE canvases
+    """
     return [ # split 0-9 wise (see below)
         # before che
         "51", "52", "53", "54", "55", 
@@ -175,6 +181,11 @@ def pixel_rank_groups():
     ]
 
 def point_ranks():
+    """_summary_
+
+    Returns:
+        dict: points, role name
+    """
     return [
         (100000, "Arch-Overseer"),
         (75000, "Grand Overseer"),
@@ -209,6 +220,11 @@ def point_rank_groups():
     ]
 
 def point_rank_roles():
+    """_summary_
+
+    Returns:
+        dict: _description_
+    """
     roles = {}
 
     for threshold, rank in point_ranks():

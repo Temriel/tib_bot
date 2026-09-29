@@ -1,4 +1,8 @@
 import functools
+from functools import lru_cache
+from pathlib import Path
+from collections import Counter
+import glob
 import sqlite3
 import asyncio
 import csv
@@ -10,15 +14,12 @@ from typing import Union, Optional
 import discord
 from discord import app_commands
 from PIL import Image
-import tib_utility.config as config
-from functools import lru_cache
-from pathlib import Path
-from collections import Counter
 import matplotlib
-matplotlib.use('agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
-import glob
+from tib_utility import config
+matplotlib.use('agg')
+
 
 CANVAS_REGEX = re.compile(r'^(?![cC])[a-z0-9]{1,4}$')
 KEY_REGEX = re.compile(r'(?=.*[a-z])[a-z0-9]{512}$')
@@ -231,7 +232,7 @@ async def filter(canvas: str, user_key: str, logfile: str, user_log_file: str, u
     print(f'Subprocess output: {stdout_str}')
     print(f'Subprocess error: {stderr_str}')
     if filter_result.returncode != 0:
-        print(f'filter != 0, something went wrong.')
+        print('filter != 0, something went wrong.')
         return False
     try:
         if os.path.getsize(user_log_file) == 0:
@@ -241,19 +242,24 @@ async def filter(canvas: str, user_key: str, logfile: str, user_log_file: str, u
         print('No file found.')
         return False
     except Exception as e:
-        print('Something went wrong.')
+        print(f'Something went wrong! Error: {e}')
         return False
     return True
 
 
-async def render(user: Union[discord.User, discord.Member], canvas: str, mode: str, user_log_file: str) -> tuple[
-    asyncio.subprocess.Process, str, str]:
-    """Render pipeline to make placemaps using filtered user log keys using Etos2's pxlslog-explorer.
+async def render(
+        user: Union[discord.User, discord.Member],
+        canvas: str,
+        mode: str,
+        user_log_file: str) -> tuple[asyncio.subprocess.Process,str, str]:
+    """Render pipeline to make placemaps using filtered user log keys
+    using Etos2's pxlslog-explorer.
 
     Args:
         user (Union[discord.User, discord.Member]): For Discord user ID.
         canvas (str): The canvas to render for.
-        mode (str): The mode to render in. Defaults to normal, and can be virgin, activity, age, milliseconds, minutes, seconds, or combined.
+        mode (str): The mode to render in. Defaults to normal, and can be virgin, 
+        activity, age, milliseconds, minutes, seconds, or combined.
         user_log_file (str): The filepath to the filtered user log file in question.
 
     Returns:
@@ -261,9 +267,9 @@ async def render(user: Union[discord.User, discord.Member], canvas: str, mode: s
     """
     bg, palette_path, output_path = config.paths(canvas, user.id, mode)
     ple_dir = config.pxlslog_explorer_dir
-    render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette', palette_path,
-                  '--screenshot', '--output', output_path, mode]
-    # render_result = subprocess.run(render_cli, capture_output=True, text=True) # use for error handling
+    render_cli = [f'{ple_dir}/render.exe', '--log', user_log_file, '--bg', bg, '--palette',
+                  palette_path, '--screenshot', '--output', output_path, mode]
+    # render_result = subprocess.run(render_cli, capture_output=True, text=True)
     render_result = await asyncio.create_subprocess_exec(
         *render_cli, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
