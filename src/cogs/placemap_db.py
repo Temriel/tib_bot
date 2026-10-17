@@ -16,7 +16,7 @@ from discord.ext import commands
 from tib_utility import config
 from tib_utility import db_utils
 from tib_utility.db_utils import cursor, database, generate_placemap, get_linked_pxls_username, \
-    placemap_description_format, filter, CANVAS_REGEX, KEY_REGEX, pixel_counting
+    placemap_description_format, ple_filter, CANVAS_REGEX, KEY_REGEX, pixel_counting
 
 
 owner_id = config.owner()
@@ -102,7 +102,7 @@ class PlacemapDBCheckKeysFromUser(discord.ui.Modal, title='Input desired logkeys
                 continue
             with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.log') as temp_log:
                 user_log_file = temp_log.name
-            success = await filter(self.canvas, user_key, logfile, user_log_file)
+            success = await ple_filter(self.canvas, user_key, logfile, user_log_file)
             if not success:
                 errors.append(f'Filtering failed for log key {idx}.')
                 if os.path.exists(user_log_file):

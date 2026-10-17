@@ -478,7 +478,7 @@ def create_points_cache(canvas: str):
     if canvas not in global_template_cache:
         global_template_cache[canvas] = {}
     
-    points_path = os.path.join(ROOT_DIR, 'template', f'c{canvas}', 'points.png')
+    points_path = os.path.join(ROOT_DIR, 'template', f'c{canvas}', 'points*.png')
     if not os.path.exists(points_path):
         print(f'Points image not found for canvas {canvas}.')
         return
@@ -511,7 +511,9 @@ def placemap_modifier(rgb_colour: tuple) -> Optional[str]:
     return colour_map.get(rgb_colour)
 
 
-async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str, initial_canvas_path, logkey_check_from_user: bool = False, template_from_user: Optional[list[str]] = None) -> tuple[
+async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str,
+                           initial_canvas_path, logkey_check_from_user: bool = False,
+                           template_from_user: Optional[list[str]] = None) -> tuple[
     int, int, dict]:
     """Function to find amount of TPE pixels for any given canvas, and for any given user.
 
@@ -520,8 +522,11 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
         temp_pattern (str): The template pattern to use. Defaults to "./template/c{canvas}/*.png".
         palette_path (str): The path to the palette file.
         initial_canvas_path (_type_): The path to the initial canvas image.
-        logkey_check_from_user (bool): If True, skips the cache process since this command call comes from regular users using their OWN temp pattern. If False, use the saved ones (see temp_pattern).
-        template_from_user (Optional[list[str]]): A list of paths to template images uploaded by the user.
+        logkey_check_from_user (bool): If True, skips the cache process since this command call
+        comes from regular users using their OWN temp pattern. If False, use the saved ones
+        (see temp_pattern).
+        template_from_user (Optional[list[str]]): A list of paths to template images uploaded by
+        the user.
     Returns:
         tuple[int, int]: Correct pixels (tpe_place - tpe_grief) and grief pixels (tpe_grief).
     """
