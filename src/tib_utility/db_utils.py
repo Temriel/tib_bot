@@ -218,7 +218,7 @@ def get_all_users() -> list[tuple[int, str]]:
     return results
 
 
-async def filter(canvas: str, user_key: str, logfile: str, user_log_file: str, user: Optional[str] = None) -> bool:
+async def ple_filter(canvas: str, user_key: str, logfile: str, user_log_file: str, user: Optional[str] = None) -> bool:
     ple_dir = config.pxlslog_explorer_dir
     filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', logfile,
                 '--output', user_log_file]
@@ -291,7 +291,7 @@ async def gpl_palette(palette_path: str) -> list[tuple[int, int, int]]:
 @lru_cache(maxsize=128)
 def read_gpl_palette(palette_path: str):
     palette = []
-    with open(palette_path, 'r') as f:
+    with open(palette_path, 'r', encoding='utf-8') as f:
         for line in f:
             if line.startswith(('GIMP', 'Name', 'Columns', '#')):
                 continue
@@ -363,7 +363,7 @@ def read_pixel_counting(user_log_file: str):
     Returns:
         Tuple: The total number of pixels placed (place - und), the number of undo actions, and the number of mod actions.
     """
-    with open(user_log_file, 'r') as log_key:
+    with open(user_log_file, 'r', encoding='utf-8') as log_key:
         data = log_key.read()
     place = data.count('user place')
     undo = data.count('undo')
@@ -384,7 +384,7 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
         final_state = {}
         replaced_user = 0  # UNUSED
         try:
-            with open(user_log_file, newline='') as csvfile:
+            with open(user_log_file, newline='', encoding='utf-8') as csvfile:
                 reader = csv.reader(csvfile, delimiter='\t')
                 for row in reader:
                     if len(row) >= 6:
@@ -431,7 +431,7 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
 
 
 def create_template_cache(canvas: str):
-     if canvas not in global_template_map:
+    if canvas not in global_template_map:
         loading_time_begin = time.time()
         template_map = []
         try:
@@ -459,6 +459,9 @@ def create_template_cache(canvas: str):
                                         'pixels': cropped_img.load(),
                                         'bbox': bbox
                                     })
+                        except FileNotFoundError as e:
+                            print(f'{e}')
+                            return 0, 0
                         except Exception as e:
                             print(f'Error loading template image {path}: {e}')
         except FileNotFoundError as e:
@@ -489,6 +492,9 @@ def create_points_cache(canvas: str):
                 'bbox': bbox,
                 'size': points_img.size
             }
+    except FileNotFoundError as e:
+        print(f'{e}')
+        global_template_cache[canvas]['points_img'] = None
     except Exception as e:
         print(f'An error occured: {e}')
         global_template_cache[canvas]['points_map'] = None
@@ -496,11 +502,11 @@ def create_points_cache(canvas: str):
 
 def placemap_modifier(rgb_colour: tuple) -> Optional[str]:
     colour_map = {
-        (255, 0, 0): 'outlines', # 2x # OUTLINES # red / FF0000 
-        (0, 0, 255): 'operations_x2', # 2x # OPERATIONS MISC # blue / 0000FF 
-        (0, 255, 0): 'operations_x3', # 3x # OPERATIONS # green / 00FF00 
-        (0, 255, 255): 'no_grief_only_correct', # x1 # "don't count any as griefs, but only register correct pixels" # Cyan / 00FFFF 
-        (255, 0, 255): 'count_all', # x1 # "count all pixels here regardless" # magenta / FF00FF 
+        (255, 0, 0): 'outlines', # 2x # OUTLINES # red / FF0000
+        (0, 0, 255): 'operations_x2', # 2x # OPERATIONS MISC # blue / 0000FF
+        (0, 255, 0): 'operations_x3', # 3x # OPERATIONS # green / 00FF00
+        (0, 255, 255): 'no_grief_only_correct', # x1 # "don't count any as griefs, but only register correct pixels" # Cyan / 00FFFF
+        (255, 0, 255): 'count_all', # x1 # "count all pixels here regardless" # magenta / FF00FF
     }
     return colour_map.get(rgb_colour)
 
@@ -572,8 +578,8 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
                 return placemap_modifier((pixel[0], pixel[1], pixel[2]))
         except IndexError:
             pass
-        return 1    
-    
+        return 1
+
     @functools.lru_cache(maxsize=50000)
     def get_template_pixel(x, y):
         correct_colours = set()
@@ -593,7 +599,7 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
                 except IndexError:
                     pass
         return frozenset(correct_colours), has_virgin
-    
+
     tpe_place = {}
     tpe_grief = {}
 
@@ -605,7 +611,7 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
         'count_all': 0
     }
 
-    with open(user_log_file, newline='') as csvfile:
+    with open(user_log_file, newline='', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile, delimiter='\t')
         for row in reader:
             if len(row) < 6:
@@ -630,9 +636,9 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
                         del tpe_grief[coord]
             if action != 'user place':
                 continue
-            
+
             correct_colours, has_virgin = get_template_pixel(x, y)
-            
+
             is_correct = False
             is_virgin = False
             present = bool(correct_colours)
@@ -649,10 +655,11 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
                 tpe_grief.pop(coord, None)
                 if cat in points:
                     points[cat] += 1
-            elif present and not is_correct: # fails is_correct check, fails is_virgin check, but is present, thus it's a grief
+            # fails is_correct check, fails is_virgin check, but is present, thus it's a grief
+            elif present and not is_correct:
                 if cat == 'no_grief_only_correct':
                     pass
-                else: 
+                else:
                     tpe_grief[coord] = tpe_grief.get(coord, 0) + 1
                     tpe_place.pop(coord, None)
                     if cat in points:
@@ -678,6 +685,7 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
 
 
 async def tpe_pixels_count_user(user_id: int, callback=None) -> dict:
+    """"""
     return await tpe_pixels_count_user_canvas(user_id=user_id, callback=callback)
 
 
@@ -798,31 +806,31 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
             _, palette_path, _ = config.paths(canvas, user.id, mode)
 
             if not CANVAS_REGEX.fullmatch(canvas):
-                return False, {'error': f'Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.'}
+                return False, {'error': 'Invalid format! A canvas code may not begin with a c, and can only contain a-z and 0-9.'}
             
             canvas_int = int(''.join(inte for inte in canvas if inte.isdigit()))
             if canvas_int > 200 and not logfile: # ensures that even 9 years into the future we'll still get placemaps
-                return False, {'error': f'That canvas doesn\'t exist yet, silly.'}
+                return False, {'error': 'That canvas doesn\'t exist yet, silly.'}
 
-            if not os.path.exists(logfile): 
-                return False, {'error': f'No log file found. Either invalid canvas or the logs haven\'t been added yet.'}
+            if not os.path.exists(logfile):
+                return False, {'error': 'No log file found. Either invalid canvas or the logs haven\'t been added yet.'}
 
             if not user_key:
-                return False, {'error': f'No log key found for this canvas.'}
+                return False, {'error': 'No log key found for this canvas.'}
 
             user_key = user_key[0]
             if isinstance(user_key, int):
-                return False, {'error': f'Your key is just a bunch of numbers smh.'}
+                return False, {'error': 'Your key is just a bunch of numbers smh.'}
 
             user_key = str(user_key)
             if not KEY_REGEX.fullmatch(user_key):
-                return False, {'error': f'Invalid format! A log key can only contain a-z, and 0-9.'}
+                return False, {'error': 'Invalid format! A log key can only contain a-z, and 0-9.'}
             
             user_log_file = f'{ple_dir}/pxls-userlogs-tib/{user.id}_pixels_c{canvas}.log'
             if not nofilter or not os.path.exists(user_log_file):
-                success = await filter(canvas, user_key, logfile, user_log_file, user.name)
+                success = await ple_filter(canvas, user_key, logfile, user_log_file, user.name)
                 if not success:
-                    return False, {'error': f'Filtering failed. Ping Temriel.'}
+                    return False, {'error': 'Filtering failed. Ping Temriel.'}
             filter_end_time = time.time()
             print(f'filter.exe took {filter_end_time - filter_start_time:.2f}s')
 
@@ -868,7 +876,7 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
             print(f'render.exe took {render_end_time - render_start_time:.2f}s')
 
             if render_result.returncode != 0:
-                return False, {'error': f'Something went wrong when generating the placemap! Ping Temriel.'}
+                return False, {'error': 'Something went wrong when generating the placemap! Ping Temriel.'}
             return True, {
                 'total_pixels': total_pixels,  # placed - undo
                 'undo': undo,  # reverses a pixel
@@ -903,8 +911,8 @@ async def placemap_description_format(canvas: str, results: dict) -> str:
     active_count = results.get("active_count", 0)
     survived = results.get("survived", 0)
     survived_perc = results.get("survived_perc", 0)
-    replaced_user = results.get("replaced_user", 0)
-    replaced_other = results.get("replaced_other", 0)
+    #replaced_user = results.get("replaced_user", 0)
+    #replaced_other = results.get("replaced_other", 0)
     tpe_pixels = results.get("tpe_pixels", 0)
     tpe_griefs = results.get("tpe_griefs", 0)
     constructed_desc = (
