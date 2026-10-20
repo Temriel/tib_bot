@@ -54,6 +54,13 @@ def operations_channel():
         raise ValueError("OPERATIONS_CHANNEL_ID not set!")
     return int(operations_channel_id)
 
+def rankup_channel():
+    """Channel for Tib rankup logging (operations, rankups, etc.)"""
+    rankup_channel_id = os.getenv("RANKUP_CHANNEL_ID")
+    if rankup_channel_id is None:
+        raise ValueError("RANKUP_CHANNEL_ID not set!")
+    return int(rankup_channel_id)
+
 def admin_server():
     """Guild for admin commands."""
     admin_server_id = os.getenv("ADMIN_SERVER_ID")

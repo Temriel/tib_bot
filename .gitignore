@@ -10,6 +10,7 @@
 points_db.py
 points_utils.py
 points_tables.py
+points_checker.py
 .pylintrc
 
 # Byte-compiled / optimized / DLL files

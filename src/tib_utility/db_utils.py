@@ -1,3 +1,5 @@
+"""Generalised utility file for everything Tib."""
+
 import functools
 from functools import lru_cache
 from pathlib import Path
@@ -51,6 +53,7 @@ database.execute('''
         user_id INT,
         username STR UNIQUE,
         notif_status BOOLEAN DEFAULT 0,
+        rankup_status BOOLEAN DEFAULT 1,
         PRIMARY KEY (user_id)
     )
 ''')
@@ -218,7 +221,9 @@ def get_all_users() -> list[tuple[int, str]]:
     return results
 
 
-async def ple_filter(canvas: str, user_key: str, logfile: str, user_log_file: str, user: Optional[str] = None) -> bool:
+async def ple_filter(canvas: str, user_key: str, logfile: str, user_log_file: str, 
+                     user: Optional[str] = None) -> bool:
+    """Calls pxlslog-explorer's filter.exe to filter a log file for a specific user key."""
     ple_dir = config.pxlslog_explorer_dir
     filter_cli = [f'{ple_dir}/filter.exe', '--user', user_key, '--log', logfile,
                 '--output', user_log_file]
@@ -478,7 +483,7 @@ def create_points_cache(canvas: str):
     if canvas not in global_template_cache:
         global_template_cache[canvas] = {}
     
-    points_path = os.path.join(ROOT_DIR, 'template', f'c{canvas}', 'points*.png')
+    points_path = os.path.join(ROOT_DIR, 'template', f'c{canvas}', 'points.png')
     if not os.path.exists(points_path):
         print(f'Points image not found for canvas {canvas}.')
         return

@@ -51,6 +51,7 @@ class RoleUtility:
             if new_role.is_assignable():
                 try:
                     await member.add_roles(new_role)
+                    await RoleUtility.rankup_message(guild, member, total_points, new_role)
                 except discord.Forbidden:
                     pass
 
@@ -67,3 +68,49 @@ class RoleUtility:
         query = "SELECT COALESCE(SUM(points), 0) FROM points WHERE user = ?"
         cursor.execute(query, (username,))
         return int(cursor.fetchone()[0])
+
+    @staticmethod
+    def points_to_next_role(total_points: int) -> int:
+        """Finds the points needed to reach the next role
+
+        Args:
+            total_points (int): The user's current total points
+
+        Returns:
+            int: The number of points needed to reach the next role, else 0
+        """
+        role_ids = config.point_rank_roles()
+        thresholds = sorted(role_ids.keys())
+        for threshold in thresholds:
+            if total_points < threshold:
+                return threshold - total_points
+        return 0
+
+    @staticmethod
+    async def rankup_message(guild: discord.Guild, member: discord.Member,
+                             total_points: int, new_role: discord.Role):
+        """Sends a rankup message in a chosen channel."""
+        rankup_channel_id = config.rankup_channel()
+        rankup_channel = guild.get_channel(rankup_channel_id)
+        if rankup_channel is None:
+            print(f"Rankup channel with ID {rankup_channel_id} not found.")
+            return
+
+        member_id = member.id
+
+        embed = discord.Embed(
+            title="New rank up",
+            description=f"""Congrats {member.mention}, you are now {new_role.name} with {total_points} points!
+            You need {RoleUtility.points_to_next_role(total_points)} points until the next rank.""",
+            color=discord.Color.green()
+        )
+        embed.set_footer(text="If you want to opt-out of rankup messages, you may run /operations no-rankup to disable them.")
+        query = "SELECT rankup_status FROM users WHERE user_id = ?"
+        cursor.execute(query, (member_id,))
+        row = cursor.fetchone()
+        if row is not None and row[0] == 0:
+            content = None
+        else:
+            content = member.mention
+        if isinstance(rankup_channel, discord.TextChannel):
+            await rankup_channel.send(content=content, embed=embed)
