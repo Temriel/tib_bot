@@ -1,7 +1,7 @@
 """This module handles all data parsing of pxls.space data."""
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from discord.ext import commands # tasks
 from tib_utility.webhandler import WebHandler
 
@@ -14,7 +14,7 @@ class Stats(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self._cached_stats = None
-        self._cache_until = datetime.min
+        self._cache_until = datetime.min.replace(tzinfo=timezone.utc)
 
     def _next_cache_time(self, now: datetime) -> datetime:
         """Calculate the next cache time based on the current time."""
@@ -26,7 +26,7 @@ class Stats(commands.Cog):
     async def get_stats(self):
         """Function that decides wether to use cached data or 
         if new data should be parsed"""
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         if self._cached_stats is not None and now < self._cache_until:
             return self._cached_stats
         return await self.fetch_stats()
@@ -42,7 +42,7 @@ class Stats(commands.Cog):
                 handler = WebHandler()
                 data = await asyncio.to_thread(handler.fetch_json)
                 self._cached_stats = data
-                self._cache_until = self._next_cache_time(datetime.now())
+                self._cache_until = self._next_cache_time(datetime.now(timezone.utc))
                 return data
             except Exception as e:
                 if attempt == 3:
@@ -117,7 +117,7 @@ class Stats(commands.Cog):
         print(canvascode)
 #    @tasks.loop(seconds=60)
 #    async def update_stats(self):
-#        now = datetime.now()
+#        now = datetime.now(timezone.utc)
 #        minute = now.strftime("%M")
 #        if int(minute) in TARGET_MINUTES:
 #            try:

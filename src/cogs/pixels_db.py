@@ -161,6 +161,7 @@ class LeaderboardView(discord.ui.View):
 
 
 class Database(commands.Cog):
+    """Interact with me..."""
     def __init__(self, client):
         self.client = client
 
@@ -352,7 +353,7 @@ class Database(commands.Cog):
                     last = i
             if first is None or last is None:
                 await interaction.followup.send('Something went wrong (there\'s data but it\'s not right.)', ephemeral=True)
-                print("Generating /graph all went wrong... somehow.")
+                print("Generating `/graph all` went wrong... somehow.")
                 return
             for c in config.tpe_canvas()[first:last+1]:
                 canvases.append(f"c{c}")

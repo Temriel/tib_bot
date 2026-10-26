@@ -20,6 +20,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from tib_utility import config
+from tib_utility.points_checker import PointsUtils
 matplotlib.use('agg')
 
 
@@ -123,6 +124,7 @@ global_template_cache = {}
 
 
 def db_shutdown():
+    """Excorcism."""
     try:
         cursor.execute("PRAGMA wal_checkpoint(TRUNCATE);")
         database.commit()
@@ -354,7 +356,8 @@ async def pixel_counting(user_log_file: str):
         user_log_file (str): Filepath to a user log file.
 
     Returns:
-        Tuple: The total number of pixels placed (place - und), the number of undo actions, and the number of mod actions.
+        Tuple: The total number of pixels placed (place - und), the number of undo actions,
+        and the number of mod actions.
     """
     return await asyncio.to_thread(read_pixel_counting, user_log_file)
 
@@ -366,7 +369,8 @@ def read_pixel_counting(user_log_file: str):
         user_log_file (str): Filepath to a user log file.
 
     Returns:
-        Tuple: The total number of pixels placed (place - und), the number of undo actions, and the number of mod actions.
+        Tuple: The total number of pixels placed (place - und), the number of undo actions,
+        and the number of mod actions.
     """
     with open(user_log_file, 'r', encoding='utf-8') as log_key:
         data = log_key.read()
@@ -381,10 +385,12 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
     """Find survival stats on a canvas"""
 
     def process_stats():
-        """Small function to parse a log file and find how many pixels survived, how many were replaced by other users, and how many were replaced by the user themselves.
+        """Small function to parse a log file and find how many pixels survived, how many were
+        replaced by other users, and how many were replaced by the user themselves.
 
         Returns:
-            _type_: The number of pixels that survived, the number of pixels that were replaced by other users, and the number of pixels that were replaced by the user themselves.
+            _type_: The number of pixels that survived, the number of pixels that were replaced
+            by other users, and the number of pixels that were replaced by the user themselves.
         """
         final_state = {}
         replaced_user = 0  # UNUSED
@@ -393,8 +399,11 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
                 reader = csv.reader(csvfile, delimiter='\t')
                 for row in reader:
                     if len(row) >= 6:
-                        x, y, index, action = int(row[2].strip()), int(row[3].strip()), int(row[4].strip()), row[
-                            5].strip()
+                        x, y, index, action = (
+                            int(row[2].strip()),
+                            int(row[3].strip()),
+                            int(row[4].strip()),
+                            row[5].strip())
                         coord = (x, y)
                         if action == 'user place':
                             if (x, y) in final_state:
@@ -431,11 +440,15 @@ async def survival(user_log_file: str, final_canvas_path: str, palette: list[tup
             print(f'{e}')
             return 0, 0, 0
         return replaced_user, replaced_other, survived
+        # doing all of this is really bad for performence honestly, because we're analysing two
+        # entire logs, loading the final image, and comparing, that means this can take fucking
+        # Ages (and by ages I mean like 0.10 seconds BUT STILL)
 
     return await asyncio.to_thread(process_stats)
 
 
 def create_template_cache(canvas: str):
+    """Creates a cache to allow faster loading times. Is partially initialised upon boot."""
     if canvas not in global_template_map:
         loading_time_begin = time.time()
         template_map = []
@@ -514,6 +527,31 @@ def placemap_modifier(rgb_colour: tuple) -> Optional[str]:
         (255, 0, 255): 'count_all', # x1 # "count all pixels here regardless" # magenta / FF00FF
     }
     return colour_map.get(rgb_colour)
+
+
+def get_operation_info(user_id: int, canvas: str): # VADE
+    """Finds relevant operation info, if any.""" # RETRO
+    query = """
+    SELECT 
+        log.operation_id,
+        log.phase,
+        log.start_time AS start,
+        log.end_time AS end,
+        phase.start_time AS phase_start,
+        phase.end_time AS phase_end,
+        phase.phase_multiplier
+    FROM operation_log AS log
+    JOIN users AS user ON user.username = log.user
+    JOIN operations AS ops ON ops.operation_id = log.operation_id
+    JOIN operation_phases as phase
+    ON phase.operation_id = log.operation_id AND phase.phase = log.phase
+    WHERE user.user_id = ? AND ops.canvas = ?
+    """ # SATANA
+    cursor.execute(query, (user_id, canvas,))
+    row = cursor.fetchall()
+    if not row:
+        return []
+    return row
 
 
 async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: str,
@@ -873,12 +911,28 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
                 tpe_start_time = time.time()
                 temp_pattern = os.path.join(ROOT_DIR, 'template', f'c{canvas}', '*.png')
                 initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
-                tpe_pixels, tpe_griefs, tpe_points = await tpe_pixels_count(user_log_file, temp_pattern, palette_path,
-                                                                initial_canvas_path)
+                tpe_pixels, tpe_griefs, tpe_points = await tpe_pixels_count(
+                    user_log_file, temp_pattern, palette_path, initial_canvas_path)
                 tpe_end_time = time.time()
                 print(f'{tpe_pixels} pixels placed for TPE (took {tpe_end_time - tpe_start_time:.2f}s)')
                 print(f'{tpe_griefs} pixels griefed')
                 print(tpe_points)
+
+                point_start_time = time.time()
+                try:
+                    operation_results = []
+                    for op_id, phase, phase_start, phase_end, multiplier in get_operation_info(user.id, canvas):
+                        point_amount = PointsUtils.score_phase_log(
+                            canvas, op_id, phase, user.id, user_log_file,
+                            phase_start, phase_end, multiplier,
+                        )
+                        operation_results.append(point_amount)
+                    # PointsUtils.score_phase_log(op_info)
+                    print(operation_results)
+                except Exception as e:
+                    print(f"Something went wrong when calculating points! {e}")
+                point_end_time = time.time()
+                print(f'points took {point_end_time - point_start_time:.2f}s')
 
             render_start_time = time.time()
             render_result, filename, output_path = await render(user, canvas, mode, user_log_file)
