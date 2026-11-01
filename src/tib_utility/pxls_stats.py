@@ -1,6 +1,7 @@
 """This module handles all data parsing of pxls.space data."""
 
 import asyncio
+import json # for errors
 from datetime import datetime, timedelta, timezone
 from discord.ext import commands # tasks
 from tib_utility.webhandler import WebHandler
@@ -44,7 +45,7 @@ class Stats(commands.Cog):
                 self._cached_stats = data
                 self._cache_until = self._next_cache_time(datetime.now(timezone.utc))
                 return data
-            except Exception as e:
+            except (OSError, json.JSONDecodeError) as e:
                 if attempt == 3:
                     print(f"Failed to fetch stats: {e}")
                     return None
@@ -84,7 +85,7 @@ class Stats(commands.Cog):
                     if len(results) == len(username):
                         break
             return results
-        except Exception as e:
+        except (OSError, json.JSONDecodeError) as e:
             print(e)
 
     async def fetch_info(self):
@@ -93,7 +94,7 @@ class Stats(commands.Cog):
             try:
                 handler = WebHandler()
                 return await asyncio.to_thread(handler.fetch_info)
-            except Exception as e:
+            except (OSError, json.JSONDecodeError) as e:
                 if attempt == 3:
                     print(f"Failed to fetch info: {e}")
                     return None
@@ -112,7 +113,7 @@ class Stats(commands.Cog):
                 return None
             canvascode = str(data.get("canvasCode", 0))
             return canvascode
-        except Exception as e:
+        except (OSError, json.JSONDecodeError) as e:
             print(e)
         print(canvascode)
 #    @tasks.loop(seconds=60)

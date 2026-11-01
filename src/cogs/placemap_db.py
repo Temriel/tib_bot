@@ -78,27 +78,30 @@ class PlacemapDBCheckKeysFromUser(discord.ui.Modal, title='Input desired logkeys
         )
         self.add_item(self.logkeys)
     
-    async def on_submit(self, interaction: discord.Interaction): 
-        await interaction.response.send_message('Processing log keys, this may take a while...', ephemeral=True)
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            'Processing log keys, this may take a while...', ephemeral=True)
         logkeys = [k.strip() for k in self.logkeys.value.strip().split(',') if k.strip()]
         if not logkeys:
             await interaction.edit_original_response(content='No logkeys provided.')
             return
-        
+
         ple_dir = config.pxlslog_explorer_dir
         logfile = f'{ple_dir}/pxls-logs/pixels_c{self.canvas}.sanit.log'
         if not os.path.exists(logfile):
-            await interaction.edit_original_response(content='No log file available for this canvas.')
+            await interaction.edit_original_response(
+                content='No log file available for this canvas.')
             return
         palette_path, initial_canvas_path = config.palette_initial_paths(self.canvas)
-        
+
         results = {}
         errors = []
-        
+
         for idx, user_key in enumerate(logkeys, start=1):
             users = f'User {idx}'
             if not KEY_REGEX.fullmatch(user_key):
-                errors.append(f'Invalid format for log key {idx}! A logkey can only contain a-z and 0-9.')
+                errors.append(
+                    f'Invalid format for log key {idx}! A logkey can only contain a-z and 0-9.')
                 continue
             with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.log') as temp_log:
                 user_log_file = temp_log.name
@@ -117,9 +120,9 @@ class PlacemapDBCheckKeysFromUser(discord.ui.Modal, title='Input desired logkeys
                     logkey_check_from_user=True,
                     template_from_user=self.template_paths
                 )
-                total_pixels, undo, mod = await pixel_counting(user_log_file)
+                total_pixels = await pixel_counting(user_log_file)
                 results[users] = {
-                    'total': total_pixels,
+                    'total': total_pixels[0],
                     'correct': correct_pixels,
                     'grief': grief_pxiels
                 }
@@ -132,20 +135,22 @@ class PlacemapDBCheckKeysFromUser(discord.ui.Modal, title='Input desired logkeys
         if not results:
             if not errors:
                 errors.append('No log keys were processed.')
-            await interaction.edit_original_response(content=f'All log keys failed to process. Errors: (if any)\n' + '\n'.join(errors))
+            await interaction.edit_original_response(
+                content='All log keys failed to process. Errors: (if any)\n' + '\n'.join(errors))
             if os.path.exists(self.temp_dir):
                 shutil.rmtree(self.temp_dir)
             return
-        
-        cleaned_results = sorted(results.keys(), key=lambda name: results[name].get('correct', 0), reverse=True)
+
+        cleaned_results = sorted(results.keys(), 
+        key=lambda name: results[name].get('correct', 0),reverse=True)
         header2 = f"{'User':<6} | {'Placed':>7} | {'Correct':>7} | {'Griefed':>7}"
         header_seperator = f"{'-'*6}-+-{'-'*7}-+-{'-'*7}-+-{'-'*7}"
-        
+
         total_pixels = sum(stats.get('total', 0) for stats in results.values())
         # yeah tpe. right
         tpe_total = sum(stats.get('correct', 0) for stats in results.values())
         grief_total = sum(stats.get('grief', 0) for stats in results.values())
-        
+
         lines = []
         for name in cleaned_results:
             stats = results[name]
@@ -372,15 +377,18 @@ class Placemap(commands.Cog):
             await interaction.response.send_message(embed=embed)
             
         except sqlite3.OperationalError as e:
-            await interaction.response.send_message('Error! Something with the DB went wrong, ping Temriel.', ephemeral=True)
+            await interaction.response.send_message(
+                'Error! Something with the DB went wrong, ping Temriel.', ephemeral=True)
             print(f'An SQLite3 error occurred: {e}')
             return
         except Exception as e:
-            await interaction.response.send_message('Error! Something went wrong, ping Temriel.', ephemeral=True)
+            await interaction.response.send_message(
+                'Error! Something went wrong, ping Temriel.', ephemeral=True)
             print(f'An error occurred: {e}')
             return
-    
-    @group.command(name='check-template', description='Upload several logkeys and templates to use Tib\'s checking feature')
+
+    @group.command(name='check-template',
+                   description='Upload several logkeys and templates to use Tib\'s checking feature')
     async def placemap_db_check_user_template(
         self,
         interaction: discord.Interaction,
@@ -396,19 +404,26 @@ class Placemap(commands.Cog):
         image_9: Optional[discord.Attachment] = None,
         image_10: Optional[discord.Attachment] = None,
     ):
+        """This funciton allows users to use the built in correct-pixel checking feature that
+        Tib uses for other templates, with up to 10 images being used at once for analysis.
+        At most, 7 logkeys can be used at once due to Discord character limits."""
         await interaction.response.defer(thinking=True, ephemeral=True)
         images = [img for img in (
-            image_1, image_2, image_3, image_4, image_5, 
+            image_1, image_2, image_3, image_4, image_5,
             image_6, image_7, image_8, image_9, image_10
         ) if img]
         if not CANVAS_REGEX.fullmatch(canvas):
-            await interaction.followup.send('Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
+            await interaction.followup.send(
+                'Invalid format! A canvas code can only contain a-z and 0-9.', ephemeral=True)
             return
         if not images:
-            await interaction.followup.send('Please upload at least one template image.', ephemeral=True)
+            await interaction.followup.send(
+                'Please upload at least one template image.', ephemeral=True)
             return
-        print(f'User {interaction.user} ({interaction.user.id}) is checking templates for canvas {canvas} with {len(images)} {"image" if len(images) == 1 else "images"}.')
-        
+        print(
+            f'User {interaction.user} ({interaction.user.id}) is checking templates for canvas'
+            f'{canvas} with {len(images)} {"image" if len(images) == 1 else "images"}.')
+
         temp_dir = tempfile.mkdtemp()
         template_paths = []
         for idx, img in enumerate(images, start=1):
@@ -416,8 +431,9 @@ class Placemap(commands.Cog):
             await img.save(out_path)
             template_paths.append(out_path)
         embed = discord.Embed(
-            title='Template Pixel Checker:tm:', 
-            description=f'Canvas: `{canvas}`\nNumber of template images: {len(template_paths)}\nYou can input the logkeys by using the button below.',
+            title='Template Pixel Checker:tm:',
+            description=(f'Canvas: `{canvas}`\nNumber of template images: {len(template_paths)}'
+                         f'\nYou can input the logkeys by using the button below.'),
             color=discord.Color.purple()
         )
         async def button_callback(interaction: discord.Interaction):
@@ -429,4 +445,5 @@ class Placemap(commands.Cog):
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 async def setup(client):
+    """Create me..."""
     await client.add_cog(Placemap(client))

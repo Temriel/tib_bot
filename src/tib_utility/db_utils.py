@@ -33,7 +33,7 @@ SRC_DIR = CUR_DIR.parents[1]
 ROOT_DIR = CUR_DIR.parents[2]
 DB_PATH = SRC_DIR / 'database.db'
 
-PIXELS_PER_POINT = config.pixels_per_point # default is 10
+PIXELS_PER_POINT = config.PIXELS_PER_POINT # default is 10
 
 database = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = database.cursor()
@@ -103,6 +103,7 @@ database.execute('''
 ''')
 database.execute('''
     CREATE TABLE IF NOT EXISTS operation_log (
+        log_id INTEGER PRIMARY KEY,
         user STR,
         start_time DATETIME,
         end_time DATETIME,
@@ -111,11 +112,16 @@ database.execute('''
         start_pixels INT,
         end_pixels INT,
         corrected INT,
-        PRIMARY KEY (user, operation_id, phase)
         FOREIGN KEY (operation_id) REFERENCES operations(operation_id)
         FOREIGN KEY (operation_id, phase) REFERENCES operation_phases(operation_id, phase)
     )
 ''')
+database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS activity_tracker
+    ON operation_log (user, operation_id)
+    WHERE end_time IS NULL;
+''') # activity tracker allows users to have several entires in a phase
+     # but only one may be active at a time.
 
 semaphore = asyncio.Semaphore(3)
 global_template_map = {}
@@ -799,8 +805,10 @@ async def tpe_pixels_count_user_canvas(user_id: Optional[int] = None, canvas: Op
     return results
 
 
-async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], dict], user_id: int, user_log_file, result_key: Optional[Union[int, str]] = None):
+async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], dict], user_id: int,
+                         user_log_file, result_key: Optional[Union[int, str]] = None):
     """Thank you PyCharm for making this work lol.
+        This function in specific is for the two force-check functions.
 
     Args:
         canvas (str): Canvas to find stats on.
@@ -814,9 +822,12 @@ async def find_tpe_stats(canvas: str, ple_dir, results: dict[Union[int, str], di
     temp_pattern = os.path.join(ROOT_DIR, 'template', f'c{canvas}', '*.png')
     initial_canvas_path = f"{ple_dir}/pxls-canvas/canvas-{canvas}-initial.png"
     try:
-        total_pixels, undo, mod = await pixel_counting(user_log_file)
-        tpe_pixels, tpe_griefs, tpe_points = await tpe_pixels_count(user_log_file, temp_pattern, palette_path,
-                                                        initial_canvas_path)
+        total_pixels, undo, mod = await pixel_counting(user_log_file) # mod is unused because this
+                                                                      # reuses the same function
+                                                                      # that exists in generate
+                                                                      # placemap (I am lazy)
+        tpe_pixels, tpe_griefs, tpe_points = await tpe_pixels_count(
+            user_log_file, temp_pattern, palette_path, initial_canvas_path)
         key = result_key if result_key is not None else user_id # to make it work for both functions
         results[key] = {
             'total_pixels': total_pixels,
@@ -885,9 +896,9 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
             total_pixels, undo, mod = await pixel_counting(user_log_file)
 
             survive_start_time = time.time()
-            replaced_user, replaced_other, survived = await survival(user_log_file,
-                                                                    f'{ple_dir}/pxls-final-canvas/canvas-{canvas}-final.png',
-                                                                    await gpl_palette(palette_path))
+            replaced_user, replaced_other, survived = await survival(
+                user_log_file, f'{ple_dir}/pxls-final-canvas/canvas-{canvas}-final.png',
+                await gpl_palette(palette_path))
             survived_perc = (survived / total_pixels * 100) if total_pixels > 0 else 0
             survived_perc = f'{survived_perc:.2f}'
             survive_end_time = time.time()

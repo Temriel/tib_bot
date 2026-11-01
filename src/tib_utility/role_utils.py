@@ -97,14 +97,17 @@ class RoleUtility:
             return
 
         member_id = member.id
+        needed_points = RoleUtility.points_to_next_role(total_points)
 
         embed = discord.Embed(
             title="New rank up",
-            description=f"""Congrats {member.mention}, you are now {new_role.name} with {total_points} points!
-            You need {RoleUtility.points_to_next_role(total_points)} points until the next rank.""",
+            description=(
+            f"Congrats {member.mention}, you are now {new_role.name} with {total_points} points!"
+            f"\nYou need {needed_points} points until the next rank."),
             color=discord.Color.green()
         )
-        embed.set_footer(text="If you want to opt-out of rankup messages, you may run /operations no-rankup to disable them.")
+        embed.set_footer(text="If you want to opt-out of rankup messages, "
+                         "you may run /operations no-rankup to disable them.")
         query = "SELECT rankup_status FROM users WHERE user_id = ?"
         cursor.execute(query, (member_id,))
         row = cursor.fetchone()

@@ -2,9 +2,9 @@
 import os
 from dotenv import load_dotenv
 load_dotenv()
-default_palette = 13 # REMINDER to change this
+DEFAULT_PALETTE = 13 # REMINDER to change this
 pxlslog_explorer_dir = os.getenv("PXLSLOG_EXPLORER_DIR")
-pixels_per_point = 10 # 10 pixels for 1 point
+PIXELS_PER_POINT = 10 # 10 pixels for 1 point
 
 def owner():
     """Defining an owner within Tib."""
@@ -115,7 +115,7 @@ def get_palette(canvas: str):
         case "93a":
             return "gimmick_4"
         case _:
-            return default_palette # change default palette lole
+            return DEFAULT_PALETTE # change default palette lole
 
 def paths(canvas: str, user: int, mode: str):
     """A number of paths designed for Tib's specific use case."""
