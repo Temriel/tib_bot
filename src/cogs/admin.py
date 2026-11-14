@@ -266,6 +266,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
     @app_commands.autocomplete(comment=points_comment_autocomplete)
     async def pixels_db_points_add(self, interaction: discord.Interaction, user: str, canvas: str, points: int, comment: str):
         """Add points to a user, with optional comments."""
+        await interaction.response.defer(ephemeral=True)
         query = "INSERT OR REPLACE INTO points (user, canvas, points, comment) VALUES (?, ?, ?, ?)"
         current_channel = interaction.channel
         try:
@@ -294,10 +295,10 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
             update_channel = interaction.client.get_channel(update_channel_id)
             to_update = True
             if not isinstance(update_channel, discord.TextChannel) or isinstance(update_channel, discord.Thread):
-                await interaction.response.send_message("update_channel_id not configured")
+                await interaction.followup.send("update_channel_id not configured")
                 to_update = False
             message = f'{"Added" if points >= 0 else "Removed"} {abs(points)} {"point" if points == -1 or points == 1 else "points"} for {user} on c{canvas}! Additional information: {comment}'
-            await interaction.response.send_message(message)
+            await interaction.followup.send(message)
             if current_channel == update_channel: # to avoid repeat messages in update_channel
                 to_update = False
             if isinstance(update_channel, (discord.TextChannel, discord.Thread)):
@@ -305,7 +306,7 @@ class Admin(commands.Cog): # this is for the actual Discord commands part
                     await update_channel.send(message)
             print(message)
         except Exception as e:
-            await interaction.response.send_message('Error! Something went wrong, check the console.', ephemeral=True)
+            await interaction.followup.send('Error! Something went wrong, check the console.', ephemeral=True)
             print(f'An error occurred: {e}')
 
     @group.command(

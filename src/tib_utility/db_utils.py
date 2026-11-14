@@ -583,7 +583,7 @@ async def tpe_pixels_count(user_log_file: str, temp_pattern: str, palette_path: 
     palette_rgb = [tuple(c) for c in await gpl_palette(palette_path)]
     if not palette_rgb:
         return 0, 0, {}
-    
+
     if logkey_check_from_user:
         template_map = []
         with Image.open(initial_canvas_path).convert('RGB') as initial_canvas_image:
@@ -934,7 +934,7 @@ async def generate_placemap(user: Union[discord.User, discord.Member], canvas: s
                     operation_results = []
                     for op_id, phase, phase_start, phase_end, multiplier in get_operation_info(user.id, canvas):
                         point_amount = PointsUtils.score_phase_log(
-                            canvas, op_id, phase, user.id, user_log_file,
+                            canvas, op_id, phase, user.id, palette_rgb, user_log_file,
                             phase_start, phase_end, multiplier,
                         )
                         operation_results.append(point_amount)
